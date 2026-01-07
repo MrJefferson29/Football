@@ -1,5 +1,5 @@
 // API Configuration
-export const API_BASE_URL = 'http://192.168.1.184:5000/api';
+export const API_BASE_URL = 'https://football-n2tj.onrender.com/api';
 
 // API Endpoints
 export const API_ENDPOINTS = {
