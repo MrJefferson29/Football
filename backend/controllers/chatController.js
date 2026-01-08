@@ -91,23 +91,23 @@ exports.sendMessage = async (req, res) => {
         }
       });
 
+    // Format replyTo for both socket and HTTP response
+    let replyToData = null;
+    if (populatedMessage.replyTo) {
+      replyToData = {
+        _id: populatedMessage.replyTo._id,
+        message: populatedMessage.replyTo.message,
+        userId: {
+          _id: populatedMessage.replyTo.userId?._id || populatedMessage.replyTo.userId,
+          username: populatedMessage.replyTo.userId?.username || 'Unknown',
+          avatar: populatedMessage.replyTo.userId?.avatar
+        }
+      };
+    }
+
     // Emit socket event
     const io = req.app.get('io');
     if (io) {
-      // Format replyTo for socket emission
-      let replyToData = null;
-      if (populatedMessage.replyTo) {
-        replyToData = {
-          _id: populatedMessage.replyTo._id,
-          message: populatedMessage.replyTo.message,
-          userId: {
-            _id: populatedMessage.replyTo.userId?._id || populatedMessage.replyTo.userId,
-            username: populatedMessage.replyTo.userId?.username || 'Unknown',
-            avatar: populatedMessage.replyTo.userId?.avatar
-          }
-        };
-      }
-
       io.to('live-chat').emit('new-message', {
         _id: populatedMessage._id,
         userId: {
@@ -123,14 +123,14 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
-    // Format replyTo for HTTP response
+    // Format response data for HTTP response
     const responseData = {
       _id: populatedMessage._id,
       userId: populatedMessage.userId,
       message: populatedMessage.message,
       image: populatedMessage.image,
       likes: populatedMessage.likes,
-      replyTo: replyToData, // Use the same formatted data as socket
+      replyTo: replyToData,
       createdAt: populatedMessage.createdAt
     };
 
