@@ -9,6 +9,14 @@ exports.getMessages = async (req, res) => {
   try {
     const messages = await ChatMessage.find()
       .populate('userId', 'username avatar')
+      .populate({
+        path: 'replyTo',
+        select: 'message userId',
+        populate: {
+          path: 'userId',
+          select: 'username avatar'
+        }
+      })
       .sort({ createdAt: -1 })
       .limit(100);
 
@@ -29,7 +37,7 @@ exports.getMessages = async (req, res) => {
 // @access  Private
 exports.sendMessage = async (req, res) => {
   try {
-    const { message, image } = req.body;
+    const { message, image, replyTo } = req.body;
 
     // Message or image must be provided
     if ((!message || !message.trim()) && !image) {
@@ -39,10 +47,22 @@ exports.sendMessage = async (req, res) => {
       });
     }
 
+    // If replying, verify the message exists
+    if (replyTo) {
+      const repliedMessage = await ChatMessage.findById(replyTo);
+      if (!repliedMessage) {
+        return res.status(404).json({
+          success: false,
+          message: 'Message being replied to not found'
+        });
+      }
+    }
+
     const chatMessage = await ChatMessage.create({
       userId: req.user.id,
       message: message ? message.trim() : '',
-      image: image || ''
+      image: image || '',
+      replyTo: replyTo || null
     });
 
     // Track activity
@@ -61,11 +81,33 @@ exports.sendMessage = async (req, res) => {
     }
 
     const populatedMessage = await ChatMessage.findById(chatMessage._id)
-      .populate('userId', 'username avatar');
+      .populate('userId', 'username avatar')
+      .populate({
+        path: 'replyTo',
+        select: 'message userId',
+        populate: {
+          path: 'userId',
+          select: 'username avatar'
+        }
+      });
 
     // Emit socket event
     const io = req.app.get('io');
     if (io) {
+      // Format replyTo for socket emission
+      let replyToData = null;
+      if (populatedMessage.replyTo) {
+        replyToData = {
+          _id: populatedMessage.replyTo._id,
+          message: populatedMessage.replyTo.message,
+          userId: {
+            _id: populatedMessage.replyTo.userId?._id || populatedMessage.replyTo.userId,
+            username: populatedMessage.replyTo.userId?.username || 'Unknown',
+            avatar: populatedMessage.replyTo.userId?.avatar
+          }
+        };
+      }
+
       io.to('live-chat').emit('new-message', {
         _id: populatedMessage._id,
         userId: {
@@ -76,13 +118,25 @@ exports.sendMessage = async (req, res) => {
         message: populatedMessage.message,
         image: populatedMessage.image,
         likes: populatedMessage.likes,
+        replyTo: replyToData,
         createdAt: populatedMessage.createdAt
       });
     }
 
+    // Format replyTo for HTTP response
+    const responseData = {
+      _id: populatedMessage._id,
+      userId: populatedMessage.userId,
+      message: populatedMessage.message,
+      image: populatedMessage.image,
+      likes: populatedMessage.likes,
+      replyTo: replyToData, // Use the same formatted data as socket
+      createdAt: populatedMessage.createdAt
+    };
+
     res.status(201).json({
       success: true,
-      data: populatedMessage
+      data: responseData
     });
   } catch (error) {
     res.status(500).json({

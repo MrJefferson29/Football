@@ -24,7 +24,12 @@ const chatMessageSchema = new mongoose.Schema({
   likedBy: [{
     type: mongoose.Schema.Types.ObjectId,
     ref: 'User'
-  }]
+  }],
+  replyTo: {
+    type: mongoose.Schema.Types.ObjectId,
+    ref: 'ChatMessage',
+    default: null
+  }
 }, {
   timestamps: true
 });

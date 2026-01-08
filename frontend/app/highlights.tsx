@@ -19,11 +19,19 @@ export default function HighlightsScreen() {
   const fetchHighlights = async () => {
     try {
       setLoading(true);
+      console.log('Fetching highlights...');
       const response = await highlightsAPI.getHighlights();
+      console.log('Highlights response:', response);
       if (response.success) {
-        setHighlights(response.data);
+        console.log('Highlights data:', response.data);
+        console.log('Number of highlights:', response.data?.length || 0);
+        setHighlights(response.data || []);
+      } else {
+        console.warn('Highlights fetch failed:', response.message);
+        Alert.alert('Error', response.message || 'Failed to load highlights');
       }
     } catch (error: any) {
+      console.error('Error fetching highlights:', error);
       Alert.alert('Error', error.message || 'Failed to load highlights');
     } finally {
       setLoading(false);
@@ -31,9 +39,11 @@ export default function HighlightsScreen() {
   };
 
   const categories = ['All', ...Array.from(new Set((highlights || []).map((h: any) => h.category).filter(Boolean)))];
-  const filteredHighlights = (highlights || []).filter((h: any) =>
-    selectedCategory === 'All' ? true : (h.category || '').toLowerCase() === selectedCategory.toLowerCase()
-  );
+  const filteredHighlights = (highlights || []).filter((h: any) => {
+    if (!h) return false;
+    if (selectedCategory === 'All') return true;
+    return (h.category || '').toLowerCase() === selectedCategory.toLowerCase();
+  });
 
   return (
     <SafeAreaView style={styles.container}>
@@ -71,24 +81,48 @@ export default function HighlightsScreen() {
           {filteredHighlights.length > 0 ? (
             filteredHighlights.map((video: any) => {
               // Extract video ID from YouTube URL if needed
-              const videoId = video.youtubeUrl?.includes('youtube.com') 
-                ? video.youtubeUrl.split('v=')[1]?.split('&')[0] 
-                : video.youtubeUrl?.includes('youtu.be/')
-                ? video.youtubeUrl.split('youtu.be/')[1]?.split('?')[0]
-                : video.youtubeUrl?.includes('youtube.com/live/')
-                ? video.youtubeUrl.split('youtube.com/live/')[1]?.split('?')[0]
-                : video.youtubeUrl?.includes('youtube.com/embed/')
-                ? video.youtubeUrl.split('embed/')[1]?.split('?')[0]
-                : video.youtubeUrl?.includes('youtube.com/shorts/')
-                ? video.youtubeUrl.split('shorts/')[1]?.split('?')[0]
-                : video._id;
+              const getVideoId = (url: string) => {
+                if (!url) return video._id || video.id || '';
+                
+                // Handle YouTube Live URLs
+                if (url.includes('youtube.com/live/')) {
+                  return url.split('youtube.com/live/')[1]?.split('?')[0]?.split('&')[0] || '';
+                }
+                // Handle YouTube Shorts
+                else if (url.includes('youtube.com/shorts/')) {
+                  return url.split('shorts/')[1]?.split('?')[0] || '';
+                }
+                // Handle embed URLs
+                else if (url.includes('youtube.com/embed/')) {
+                  return url.split('embed/')[1]?.split('?')[0] || '';
+                }
+                // Handle standard watch URLs
+                else if (url.includes('youtube.com/watch?v=')) {
+                  return url.split('v=')[1]?.split('&')[0] || '';
+                }
+                // Handle short URLs
+                else if (url.includes('youtu.be/')) {
+                  return url.split('youtu.be/')[1]?.split('?')[0] || '';
+                }
+                // Assume it's already a video ID
+                else {
+                  return url;
+                }
+              };
+              
+              const videoId = getVideoId(video.youtubeUrl) || video._id || video.id || '';
+              
+              if (!videoId) {
+                console.warn('No video ID found for video:', video);
+                return null;
+              }
               
               return (
                 <View key={video._id || video.id} style={styles.videoContainer}>
                   <YouTubeVideoCard
                     id={video._id || video.id}
                     videoId={videoId}
-                    title={video.title}
+                    title={video.title || 'Untitled'}
                     thumbnail={video.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
                     duration={video.duration || "0:00"}
                     views={video.views || "0 views"}
@@ -96,7 +130,7 @@ export default function HighlightsScreen() {
                   />
                 </View>
               );
-            })
+            }).filter(Boolean)
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No highlights available</Text>

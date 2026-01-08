@@ -301,10 +301,10 @@ export const chatAPI = {
   getMessages: async () => {
     return apiRequest(API_ENDPOINTS.CHAT.BASE);
   },
-  sendMessage: async (message?: string, image?: string) => {
+  sendMessage: async (message?: string, image?: string, replyTo?: string) => {
     return apiRequest(API_ENDPOINTS.CHAT.BASE, {
       method: 'POST',
-      body: JSON.stringify({ message, image }),
+      body: JSON.stringify({ message, image, replyTo }),
     });
   },
   likeMessage: async (id: string) => {
@@ -438,3 +438,76 @@ export const uploadAPI = {
   },
 };
 
+// Preload API - Fetches all base API endpoints for caching
+export const preloadAPI = {
+  preloadAll: async () => {
+    const results: Record<string, any> = {};
+    
+    // Fetch all base endpoints in parallel
+    const promises = [
+      // Home data
+      homeAPI.getHomeData().then(data => ({ key: 'home', data })).catch(err => ({ key: 'home', error: err.message })),
+      
+      // Polls
+      pollsAPI.getPolls().then(data => ({ key: 'polls', data })).catch(err => ({ key: 'polls', error: err.message })),
+      
+      // Matches
+      matchesAPI.getTodayMatches().then(data => ({ key: 'todayMatches', data })).catch(err => ({ key: 'todayMatches', error: err.message })),
+      matchesAPI.getMatches().then(data => ({ key: 'matches', data })).catch(err => ({ key: 'matches', error: err.message })),
+      
+      // Highlights
+      highlightsAPI.getHighlights().then(data => ({ key: 'highlights', data })).catch(err => ({ key: 'highlights', error: err.message })),
+      
+      // News
+      newsAPI.getTrendingNews().then(data => ({ key: 'trendingNews', data })).catch(err => ({ key: 'trendingNews', error: err.message })),
+      newsAPI.getNews().then(data => ({ key: 'news', data })).catch(err => ({ key: 'news', error: err.message })),
+      
+      // Live Matches
+      liveMatchesAPI.getCurrentMatch().then(data => ({ key: 'currentMatch', data })).catch(err => ({ key: 'currentMatch', error: err.message })),
+      liveMatchesAPI.getLiveMatches().then(data => ({ key: 'liveMatches', data })).catch(err => ({ key: 'liveMatches', error: err.message })),
+      
+      // Fan Groups
+      fanGroupsAPI.getFanGroups().then(data => ({ key: 'fanGroups', data })).catch(err => ({ key: 'fanGroups', error: err.message })),
+      
+      // Statistics
+      statisticsAPI.getStatistics().then(data => ({ key: 'statistics', data })).catch(err => ({ key: 'statistics', error: err.message })),
+      
+      // Products (featured and trending)
+      productsAPI.getProducts({ featured: true }).then(data => ({ key: 'featuredProducts', data })).catch(err => ({ key: 'featuredProducts', error: err.message })),
+      productsAPI.getProducts({ trending: true }).then(data => ({ key: 'trendingProducts', data })).catch(err => ({ key: 'trendingProducts', error: err.message })),
+    ];
+
+    // Check if user is logged in before fetching user-specific data
+    try {
+      const token = await getToken();
+      if (token) {
+        // Add user-specific endpoints
+        promises.push(
+          chatAPI.getMessages().then(data => ({ key: 'chatMessages', data })).catch(err => ({ key: 'chatMessages', error: err.message }))
+        );
+      }
+    } catch (err) {
+      // User not logged in, skip user-specific endpoints
+    }
+
+    // Wait for all requests to complete (success or failure)
+    const settled = await Promise.allSettled(promises);
+    
+    // Process results
+    settled.forEach((result, index) => {
+      if (result.status === 'fulfilled') {
+        const { key, data, error } = result.value;
+        if (error) {
+          console.warn(`Preload failed for ${key}:`, error);
+          results[key] = { error };
+        } else {
+          results[key] = { data };
+        }
+      } else {
+        console.warn(`Preload promise rejected:`, result.reason);
+      }
+    });
+
+    return results;
+  },
+};

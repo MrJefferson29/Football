@@ -7,7 +7,7 @@ import { router } from "expo-router"
 import { useEffect, useState, useRef } from "react"
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ToastAndroid, Easing, Animated, useWindowDimensions } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { homeAPI, pollsAPI, matchesAPI } from "@/utils/api"
+import { homeAPI, pollsAPI, matchesAPI, preloadAPI } from "@/utils/api"
 import { getDirectImageUrl } from "@/utils/imageUtils"
 import { fonts } from "@/utils/typography"
 import { LinearGradient } from "expo-linear-gradient"
@@ -28,9 +28,15 @@ export default function HomeScreen() {
   const [showVotingModal, setShowVotingModal] = useState(false)
   const [selectedMatch, setSelectedMatch] = useState<any>(null)
 
-  // Fetch all home data on mount
+  // Fetch all home data and preload all API routes on mount
   useEffect(() => {
     fetchHomeData()
+    // Preload all API endpoints in the background
+    preloadAPI.preloadAll().then((results) => {
+      console.log('API preload completed:', Object.keys(results).length, 'endpoints loaded');
+    }).catch((error) => {
+      console.warn('API preload error:', error);
+    })
   }, [])
 
   const fetchHomeData = async () => {

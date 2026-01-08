@@ -12,7 +12,8 @@ import {
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
+  Animated
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { router } from 'expo-router';
@@ -31,6 +32,15 @@ interface ChatMessage {
   message: string;
   image?: string;
   likes: number;
+  replyTo?: {
+    _id: string;
+    message: string;
+    userId: {
+      _id: string;
+      username: string;
+      avatar?: string;
+    };
+  } | string;
   createdAt: string;
 }
 
@@ -181,6 +191,8 @@ export default function CommunityScreen() {
   const [isSending, setIsSending] = useState(false);
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [highlightedMessageId, setHighlightedMessageId] = useState<string | null>(null);
   const scrollViewRef = useRef<FlatList>(null);
 
   useEffect(() => {
@@ -315,10 +327,14 @@ export default function CommunityScreen() {
       // Send message
       const response = await chatAPI.sendMessage(
         messageText || undefined,
-        messageImage || undefined
+        messageImage || undefined,
+        replyingTo?._id
       );
 
       if (response.success && response.data) {
+        // Log the response to debug
+        console.log('Message sent response:', response.data);
+        
         // Optimistically add the message immediately
         const newMsg: ChatMessage = {
           _id: response.data._id,
@@ -330,6 +346,16 @@ export default function CommunityScreen() {
           message: response.data.message || messageText,
           image: response.data.image || messageImage,
           likes: response.data.likes || 0,
+          // ADD THIS: Include replyTo from server response or use the local replyingTo
+          replyTo: response.data.replyTo || (replyingTo ? {
+            _id: replyingTo._id,
+            message: replyingTo.message,
+            userId: {
+              _id: replyingTo.userId._id,
+              username: replyingTo.userId.username,
+              avatar: replyingTo.userId.avatar
+            }
+          } : undefined),
           createdAt: response.data.createdAt || new Date().toISOString()
         };
 
@@ -342,6 +368,7 @@ export default function CommunityScreen() {
 
         setNewMessage('');
         setSelectedImage(null);
+        setReplyingTo(null);
 
         // Auto-scroll to bottom
         setTimeout(() => {
@@ -396,18 +423,66 @@ export default function CommunityScreen() {
     }
   };
 
+  const scrollToMessage = (messageId: string) => {
+    const index = messages.findIndex(m => m._id === messageId);
+    if (index !== -1 && scrollViewRef.current) {
+      // Highlight the message
+      setHighlightedMessageId(messageId);
+      
+      // Scroll to the message
+      setTimeout(() => {
+        scrollViewRef.current?.scrollToIndex({
+          index,
+          animated: true,
+          viewPosition: 0.5, // Centers the message on screen
+        });
+      }, 100);
+
+      // Remove highlight after 2 seconds
+      setTimeout(() => {
+        setHighlightedMessageId(null);
+      }, 2000);
+    }
+  };
+
   const renderMessage = ({ item }: { item: ChatMessage }) => {
     const isMe = user?._id === item.userId._id;
     const avatar = item.userId.avatar || 'https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face';
+    const replyToMessage = typeof item.replyTo === 'object' ? item.replyTo : null;
+    const isHighlighted = highlightedMessageId === item._id;
 
     return (
       <View style={[styles.messageContainer, isMe && styles.myMessageContainer]}>
         {!isMe && (
           <Image source={{ uri: avatar }} style={styles.messageAvatar} />
         )}
-        <View style={[styles.messageBubble, isMe && styles.myMessageBubble]}>
+        <Animated.View 
+          style={[
+            styles.messageBubble, 
+            isMe && styles.myMessageBubble,
+            isHighlighted && styles.highlightedMessage
+          ]}
+        >
           {!isMe && (
             <Text style={styles.messageUser}>{item.userId.username}</Text>
+          )}
+          {/* Updated Reply Preview - Clickable */}
+          {replyToMessage && (
+            <TouchableOpacity 
+              style={styles.replyPreviewInBubble}
+              onPress={() => scrollToMessage(replyToMessage._id)}
+              activeOpacity={0.8}
+            >
+              <View style={styles.replySideBar} />
+              <View style={styles.replyPreviewContent}>
+                <Text style={styles.replyPreviewUser} numberOfLines={1}>
+                  {replyToMessage.userId?.username || 'User'}
+                </Text>
+                <Text style={styles.replyPreviewText} numberOfLines={1}>
+                  {replyToMessage.message || 'Image'}
+                </Text>
+              </View>
+            </TouchableOpacity>
           )}
           {item.image && (
             <Image 
@@ -423,20 +498,29 @@ export default function CommunityScreen() {
           )}
           <View style={styles.messageFooter}>
             <Text style={styles.messageTime}>{getTimeAgo(item.createdAt)}</Text>
-            {!isMe && (
+            <View style={styles.messageActions}>
               <TouchableOpacity
-                style={styles.likeButton}
-                onPress={() => handleLikeMessage(item._id)}
+                style={styles.replyButton}
+                onPress={() => setReplyingTo(item)}
                 activeOpacity={0.7}
               >
-                <Ionicons name="heart-outline" size={14} color="#EF4444" />
-                {item.likes > 0 && (
-                  <Text style={styles.likeCount}>{item.likes}</Text>
-                )}
+                <Ionicons name="arrow-undo-outline" size={16} color="#9CA3AF" />
               </TouchableOpacity>
-            )}
+              {!isMe && (
+                <TouchableOpacity
+                  style={styles.likeButton}
+                  onPress={() => handleLikeMessage(item._id)}
+                  activeOpacity={0.7}
+                >
+                  <Ionicons name="heart-outline" size={14} color="#EF4444" />
+                  {item.likes > 0 && (
+                    <Text style={styles.likeCount}>{item.likes}</Text>
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
           </View>
-        </View>
+        </Animated.View>
       </View>
     );
   };
@@ -504,6 +588,13 @@ export default function CommunityScreen() {
                   contentContainerStyle={styles.messagesContent}
                   onContentSizeChange={() => scrollViewRef.current?.scrollToEnd({ animated: false })}
                   keyboardShouldPersistTaps="handled"
+                  onScrollToIndexFailed={(info) => {
+                    // Fallback if scrollToIndex fails
+                    const wait = new Promise(resolve => setTimeout(resolve, 500));
+                    wait.then(() => {
+                      scrollViewRef.current?.scrollToIndex({ index: info.index, animated: true });
+                    });
+                  }}
                 />
               )}
 
@@ -521,6 +612,22 @@ export default function CommunityScreen() {
               )}
 
               {/* Chat Input */}
+              {replyingTo && (
+                <View style={styles.replyingToContainer}>
+                  <View style={styles.replyingToContent}>
+                    <Ionicons name="return-down-forward" size={14} color="#3B82F6" />
+                    <Text style={styles.replyingToText}>
+                      Replying to {replyingTo.userId.username}
+                    </Text>
+                    <Text style={styles.replyingToMessage} numberOfLines={1}>
+                      {replyingTo.message || 'Image'}
+                    </Text>
+                  </View>
+                  <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                    <Ionicons name="close" size={16} color="#9CA3AF" />
+                  </TouchableOpacity>
+                </View>
+              )}
               <View style={styles.chatInputContainer}>
                 <View style={styles.inputWrapper}>
                   <TouchableOpacity
@@ -536,7 +643,7 @@ export default function CommunityScreen() {
                   </TouchableOpacity>
                   <TextInput
                     style={styles.chatInput}
-                    placeholder="Type a message..."
+                    placeholder={replyingTo ? "Write a reply..." : "Type a message..."}
                     placeholderTextColor="#9CA3AF"
                     value={newMessage}
                     onChangeText={setNewMessage}
@@ -703,6 +810,14 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: '#9CA3AF',
   },
+  messageActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyButton: {
+    marginRight: 8,
+    padding: 4,
+  },
   likeButton: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -713,6 +828,84 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: '#9CA3AF',
     marginLeft: 4,
+  },
+  replyPreview: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(59, 130, 246, 0.1)',
+    borderRadius: 8,
+    padding: 8,
+    marginBottom: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3B82F6',
+  },
+  replyPreviewLine: {
+    width: 3,
+    backgroundColor: '#3B82F6',
+    marginRight: 8,
+    borderRadius: 2,
+  },
+  replyPreviewInBubble: {
+    flexDirection: 'row',
+    backgroundColor: 'rgba(0, 0, 0, 0.05)',
+    borderRadius: 8,
+    marginBottom: 6,
+    overflow: 'hidden',
+    maxHeight: 50,
+  },
+  replySideBar: {
+    width: 4,
+    backgroundColor: '#3B82F6',
+  },
+  replyPreviewContent: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    flex: 1,
+  },
+  replyPreviewUser: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemiBold,
+    color: '#3B82F6',
+    marginBottom: 2,
+  },
+  replyPreviewText: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+  },
+  highlightedMessage: {
+    backgroundColor: 'rgba(59, 130, 246, 0.3)',
+    borderWidth: 2,
+    borderColor: '#3B82F6',
+  },
+  replyingToContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    backgroundColor: '#2D3748',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    borderTopLeftRadius: 15,
+    borderTopRightRadius: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#1A202C',
+  },
+  replyingToContent: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyingToText: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemiBold,
+    color: '#3B82F6',
+    marginLeft: 6,
+    marginRight: 6,
+  },
+  replyingToMessage: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    flex: 1,
   },
   imagePreviewContainer: {
     position: 'relative',

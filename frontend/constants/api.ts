@@ -88,5 +88,5 @@ export const API_ENDPOINTS = {
 };
 
 // Socket.io URL
-export const SOCKET_URL = 'http://192.168.50.179:5000';
+export const SOCKET_URL = 'https://football-n2tj.onrender.com';
 
