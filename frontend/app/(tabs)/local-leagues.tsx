@@ -27,6 +27,37 @@ export default function LocalLeaguesScreen() {
     'Regional Championships': { logo: '🏆', color: '#CD7F32', fullName: 'Regional Championships' },
   };
 
+  // Helper function to check if voting is disabled for a match
+  const isVotingDisabled = (match: any): boolean => {
+    if (!match.matchDate || !match.matchTime) {
+      return false;
+    }
+
+    try {
+      const matchDateTime = new Date(match.matchDate);
+      const timeParts = match.matchTime.split(':');
+      const hours = parseInt(timeParts[0], 10);
+      const minutes = parseInt(timeParts[1] || '0', 10);
+
+      if (isNaN(hours) || isNaN(minutes)) {
+        return false;
+      }
+
+      matchDateTime.setHours(hours, minutes, 0, 0);
+
+      // Add 100 minutes to match time
+      const votingDeadline = new Date(matchDateTime);
+      votingDeadline.setMinutes(votingDeadline.getMinutes() + 100);
+
+      // Check if current time has passed the voting deadline
+      const now = new Date();
+      return now > votingDeadline;
+    } catch (error) {
+      console.error('Error checking voting deadline:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     fetchMatches();
     fetchInterQuarterMatches();
@@ -87,6 +118,11 @@ export default function LocalLeaguesScreen() {
   const filteredMatches = matches;
 
   const handleMatchPress = (match: any) => {
+    // Don't open modal if voting is disabled
+    if (isVotingDisabled(match)) {
+      return;
+    }
+
     setSelectedMatch({
       ...match,
       id: match._id || match.id,
@@ -237,34 +273,52 @@ export default function LocalLeaguesScreen() {
               <Text style={styles.loadingText}>Loading matches...</Text>
             </View>
           ) : filteredMatches.length > 0 ? (
-            filteredMatches.map((match: any) => (
-              <TouchableOpacity 
-                key={match._id || match.id} 
-                style={styles.matchCard}
-                onPress={() => handleMatchPress(match)}
-              >
-                <View style={styles.matchTeams}>
-                  <View style={styles.team}>
-                    <Image 
-                      source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
-                      style={styles.teamLogo} 
-                    />
-                    <Text style={styles.teamName}>{match.homeTeam}</Text>
-                  </View>
-                  <View style={styles.matchCenter}>
-                    <Text style={styles.time}>{match.matchTime}</Text>
-                    <Text style={styles.voteText}>Tap to vote</Text>
-                  </View>
-                  <View style={styles.team}>
-                    <Text style={styles.teamName}>{match.awayTeam}</Text>
-                    <Image 
-                      source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
-                      style={styles.teamLogo} 
-                    />
-                  </View>
+            filteredMatches.map((match: any) => {
+              const hasScore = match.homeScore !== null && match.awayScore !== null;
+              const votingDisabled = isVotingDisabled(match);
+              return (
+                <View
+                  key={match._id || match.id}
+                  style={[
+                    styles.matchCard,
+                    votingDisabled && styles.matchCardDisabled
+                  ]}
+                >
+                  <TouchableOpacity 
+                    onPress={() => handleMatchPress(match)}
+                    disabled={votingDisabled}
+                    activeOpacity={votingDisabled ? 1 : 0.7}
+                  >
+                    <View style={styles.matchTeams}>
+                      <View style={styles.team}>
+                        <Image 
+                          source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
+                          style={styles.teamLogo} 
+                        />
+                        <Text style={styles.teamName}>{match.homeTeam}</Text>
+                      </View>
+                      <View style={styles.matchCenter}>
+                        {votingDisabled && hasScore ? (
+                          <Text style={styles.score}>{match.homeScore} - {match.awayScore}</Text>
+                        ) : votingDisabled ? (
+                          <Text style={styles.time}>Finished</Text>
+                        ) : (
+                          <Text style={styles.time}>{match.matchTime}</Text>
+                        )}
+                        {!votingDisabled && <Text style={styles.voteText}>Tap to vote</Text>}
+                      </View>
+                      <View style={styles.team}>
+                        <Text style={styles.teamName}>{match.awayTeam}</Text>
+                        <Image 
+                          source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
+                          style={styles.teamLogo} 
+                        />
+                      </View>
+                    </View>
+                  </TouchableOpacity>
                 </View>
-              </TouchableOpacity>
-            ))
+              );
+            })
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No matches available</Text>
@@ -337,34 +391,52 @@ export default function LocalLeaguesScreen() {
                 <Text style={styles.loadingText}>Loading matches...</Text>
               </View>
             ) : interQuarterMatches.length > 0 ? (
-              interQuarterMatches.map((match: any) => (
-                <TouchableOpacity 
-                  key={match._id || match.id} 
-                  style={styles.matchCard}
-                  onPress={() => handleMatchPress(match)}
-                >
-                  <View style={styles.matchTeams}>
-                    <View style={styles.team}>
-                      <Image 
-                        source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
-                        style={styles.teamLogo} 
-                      />
-                      <Text style={styles.teamName}>{match.homeTeam}</Text>
-                    </View>
-                    <View style={styles.matchCenter}>
-                      <Text style={styles.time}>{match.matchTime}</Text>
-                      <Text style={styles.voteText}>Tap to vote</Text>
-                    </View>
-                    <View style={styles.team}>
-                      <Text style={styles.teamName}>{match.awayTeam}</Text>
-                      <Image 
-                        source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
-                        style={styles.teamLogo} 
-                      />
-                    </View>
+              interQuarterMatches.map((match: any) => {
+                const hasScore = match.homeScore !== null && match.awayScore !== null;
+                const votingDisabled = isVotingDisabled(match);
+                return (
+                  <View
+                    key={match._id || match.id}
+                    style={[
+                      styles.matchCard,
+                      votingDisabled && styles.matchCardDisabled
+                    ]}
+                  >
+                    <TouchableOpacity 
+                      onPress={() => handleMatchPress(match)}
+                      disabled={votingDisabled}
+                      activeOpacity={votingDisabled ? 1 : 0.7}
+                    >
+                      <View style={styles.matchTeams}>
+                        <View style={styles.team}>
+                          <Image 
+                            source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
+                            style={styles.teamLogo} 
+                          />
+                          <Text style={styles.teamName}>{match.homeTeam}</Text>
+                        </View>
+                        <View style={styles.matchCenter}>
+                          {votingDisabled && hasScore ? (
+                            <Text style={styles.score}>{match.homeScore} - {match.awayScore}</Text>
+                          ) : votingDisabled ? (
+                            <Text style={styles.time}>Finished</Text>
+                          ) : (
+                            <Text style={styles.time}>{match.matchTime}</Text>
+                          )}
+                          {!votingDisabled && <Text style={styles.voteText}>Tap to vote</Text>}
+                        </View>
+                        <View style={styles.team}>
+                          <Text style={styles.teamName}>{match.awayTeam}</Text>
+                          <Image 
+                            source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
+                            style={styles.teamLogo} 
+                          />
+                        </View>
+                      </View>
+                    </TouchableOpacity>
                   </View>
-                </TouchableOpacity>
-              ))
+                );
+              })
             ) : (
               <View style={styles.emptyContainer}>
                 <Text style={styles.emptyText}>No inter-quarter matches available</Text>
@@ -459,6 +531,11 @@ const styles = StyleSheet.create({
     padding: 15,
     marginBottom: 10,
   },
+  matchCardDisabled: {
+    backgroundColor: '#3D2A2A', // Mild red overlay (#2D3748 + red tint)
+    borderColor: '#4A2E2E', // Slightly red border
+    borderWidth: 1,
+  },
   matchTeams: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -488,6 +565,11 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.body,
     color: '#9CA3AF',
+  },
+  score: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
   },
   voteText: {
     fontSize: 10,

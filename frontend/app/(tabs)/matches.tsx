@@ -36,6 +36,37 @@ export default function MatchesScreen() {
     'Ligue 1': { logo: '🇫🇷', color: '#3B82F6', fullName: 'Ligue 1' },
   };
 
+  // Helper function to check if voting is disabled for a match
+  const isVotingDisabled = (match: any): boolean => {
+    if (!match.matchDate || !match.matchTime) {
+      return false;
+    }
+
+    try {
+      const matchDateTime = new Date(match.matchDate);
+      const timeParts = match.matchTime.split(':');
+      const hours = parseInt(timeParts[0], 10);
+      const minutes = parseInt(timeParts[1] || '0', 10);
+
+      if (isNaN(hours) || isNaN(minutes)) {
+        return false;
+      }
+
+      matchDateTime.setHours(hours, minutes, 0, 0);
+
+      // Add 100 minutes to match time
+      const votingDeadline = new Date(matchDateTime);
+      votingDeadline.setMinutes(votingDeadline.getMinutes() + 100);
+
+      // Check if current time has passed the voting deadline
+      const now = new Date();
+      return now > votingDeadline;
+    } catch (error) {
+      console.error('Error checking voting deadline:', error);
+      return false;
+    }
+  };
+
   useEffect(() => {
     fetchMatches();
   }, []);
@@ -55,10 +86,11 @@ export default function MatchesScreen() {
       if (response.success) {
         setMatches(response.data);
         // Extract unique leagues
-        const uniqueLeagues = [...new Set(response.data.map((m: any) => m.league))].filter(Boolean);
+        const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+        const uniqueLeagues = [...new Set(leagueNames)] as string[];
         setLeagues(uniqueLeagues);
         if (uniqueLeagues.length > 0 && !selectedLeague) {
-          setSelectedLeague(uniqueLeagues[0] as string);
+          setSelectedLeague(uniqueLeagues[0]);
         }
       }
     } catch (error: any) {
@@ -86,6 +118,11 @@ export default function MatchesScreen() {
   const filteredFixtures = matches;
 
   const handleMatchPress = (fixture: any) => {
+    // Don't open modal if voting is disabled
+    if (isVotingDisabled(fixture)) {
+      return;
+    }
+
     setSelectedMatch({
       ...fixture,
       id: fixture._id || fixture.id,
@@ -217,13 +254,21 @@ export default function MatchesScreen() {
           ) : filteredFixtures.length > 0 ? (
             filteredFixtures.map((fixture: any) => {
               const hasScore = fixture.homeScore !== null && fixture.awayScore !== null;
+              const votingDisabled = isVotingDisabled(fixture);
               return (
-                <TouchableOpacity 
-                  key={fixture._id || fixture.id} 
-                  style={styles.matchCard}
-                  onPress={() => handleMatchPress(fixture)}
+                <View
+                  key={fixture._id || fixture.id}
+                  style={[
+                    styles.matchCard,
+                    votingDisabled && styles.matchCardDisabled
+                  ]}
                 >
-                  <View style={styles.matchTeams}>
+                  <TouchableOpacity 
+                    onPress={() => handleMatchPress(fixture)}
+                    disabled={votingDisabled}
+                    activeOpacity={votingDisabled ? 1 : 0.7}
+                  >
+                    <View style={styles.matchTeams}>
                     <View style={styles.team}>
                       <Image 
                         source={{ uri: getDirectImageUrl(fixture.homeLogo) || 'https://via.placeholder.com/40' }} 
@@ -235,12 +280,16 @@ export default function MatchesScreen() {
                       <Text style={styles.teamName}>{fixture.homeTeam}</Text>
                     </View>
                     <View style={styles.matchCenter}>
-                      {hasScore ? (
+                      {votingDisabled && hasScore ? (
+                        <Text style={styles.score}>{fixture.homeScore} - {fixture.awayScore}</Text>
+                      ) : votingDisabled ? (
+                        <Text style={styles.time}>Finished</Text>
+                      ) : hasScore ? (
                         <Text style={styles.score}>{fixture.homeScore} - {fixture.awayScore}</Text>
                       ) : (
                         <Text style={styles.time}>{fixture.matchTime}</Text>
                       )}
-                      <Text style={styles.voteText}>Tap to vote</Text>
+                      {!votingDisabled && <Text style={styles.voteText}>Tap to vote</Text>}
                     </View>
                     <View style={styles.team}>
                       <Text style={styles.teamName}>{fixture.awayTeam}</Text>
@@ -253,7 +302,8 @@ export default function MatchesScreen() {
                       />
                     </View>
                   </View>
-                </TouchableOpacity>
+                  </TouchableOpacity>
+                </View>
               );
             })
           ) : (
@@ -332,6 +382,11 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
+  },
+  matchCardDisabled: {
+    backgroundColor: '#3D2A2A', // Mild red overlay (#2D3748 + red tint)
+    borderColor: '#4A2E2E', // Slightly red border
+    borderWidth: 1,
   },
   matchTeams: {
     flexDirection: 'row',

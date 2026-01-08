@@ -149,6 +149,36 @@ exports.createMatch = async (req, res) => {
   }
 };
 
+// Helper function to check if voting is disabled for a match
+const isVotingDisabled = (match) => {
+  if (!match.matchDate || !match.matchTime) {
+    return false; // If no date/time, allow voting (fallback)
+  }
+
+  try {
+    // Combine matchDate and matchTime to create a datetime
+    const matchDateTime = new Date(match.matchDate);
+    const [hours, minutes] = match.matchTime.split(':').map(Number);
+    
+    if (isNaN(hours) || isNaN(minutes)) {
+      return false; // If time parsing fails, allow voting (fallback)
+    }
+
+    matchDateTime.setHours(hours, minutes, 0, 0);
+    
+    // Add 100 minutes (1 hour 40 minutes) to match time
+    const votingDeadline = new Date(matchDateTime);
+    votingDeadline.setMinutes(votingDeadline.getMinutes() + 100);
+    
+    // Check if current time has passed the voting deadline
+    const now = new Date();
+    return now > votingDeadline;
+  } catch (error) {
+    console.error('Error checking voting deadline:', error);
+    return false; // On error, allow voting (fallback)
+  }
+};
+
 // @desc    Vote on match
 // @route   POST /api/matches/:id/vote
 // @access  Private
@@ -162,6 +192,14 @@ exports.voteMatch = async (req, res) => {
       return res.status(404).json({
         success: false,
         message: 'Match not found'
+      });
+    }
+
+    // Check if voting is disabled (match time + 100 minutes has elapsed)
+    if (isVotingDisabled(match)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Voting for this match has ended. Voting closes 100 minutes after match start time.'
       });
     }
 
