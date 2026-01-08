@@ -1,164 +1,157 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useState } from 'react';
-import { Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router, useLocalSearchParams } from 'expo-router';
+import React, { useState, useEffect } from 'react';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
+import { predictionForumsAPI } from '@/utils/api';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function PredictionForumsScreen() {
-  const [selectedForum, setSelectedForum] = useState(null);
+  const { user } = useAuth();
+  const [forums, setForums] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [selectedForum, setSelectedForum] = useState<string | null>(null);
 
-  const forums = [
-    {
-      id: 1,
-      name: 'Premier League Experts',
-      description: 'Connect with top Premier League analysts and get exclusive insights',
-      members: 1250,
-      price: 9.99,
-      features: ['Live match analysis', 'Pre-match predictions', 'Expert Q&A'],
-      icon: '🏆',
-      color: '#FFD700'
-    },
-    {
-      id: 2,
-      name: 'Champions League Elite',
-      description: 'Premium forum for Champions League predictions and analysis',
-      members: 890,
-      price: 14.99,
-      features: ['Knockout stage analysis', 'Tactical breakdowns', 'Player performance insights'],
-      icon: '⭐',
-      color: '#3B82F6'
-    },
-    {
-      id: 3,
-      name: 'Local Leagues Pro',
-      description: 'Specialized forum for local and regional league predictions',
-      members: 650,
-      price: 7.99,
-      features: ['Local expert insights', 'Regional analysis', 'Grassroots predictions'],
-      icon: '🏟️',
-      color: '#10B981'
-    },
-    {
-      id: 4,
-      name: 'World Cup Legends',
-      description: 'Exclusive forum for major tournament predictions and analysis',
-      members: 2100,
-      price: 19.99,
-      features: ['Tournament predictions', 'Team analysis', 'Historical insights'],
-      icon: '🌍',
-      color: '#EF4444'
-    },
-    {
-      id: 5,
-      name: 'Tactics & Strategy',
-      description: 'Deep dive into football tactics and strategic analysis',
-      members: 750,
-      price: 12.99,
-      features: ['Formation analysis', 'Tactical discussions', 'Coach insights'],
-      icon: '📊',
-      color: '#8B5CF6'
+  useEffect(() => {
+    fetchForums();
+  }, []);
+
+  const fetchForums = async () => {
+    try {
+      setLoading(true);
+      const response = await predictionForumsAPI.getPredictionForums();
+      if (response.success) {
+        setForums(response.data);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load prediction forums');
+    } finally {
+      setLoading(false);
     }
-  ];
-
-  const handleJoinForum = (forum) => {
-    Alert.alert(
-      'Join Forum',
-      `Join ${forum.name} for $${forum.price}/month?`,
-      [
-        {
-          text: 'Cancel',
-          style: 'cancel'
-        },
-        {
-          text: 'Pay & Join',
-          style: 'default',
-          onPress: () => {
-            // Simulate payment process
-            Alert.alert(
-              'Payment Required',
-              'Redirecting to payment gateway...',
-              [
-                {
-                  text: 'OK',
-                  onPress: () => {
-                    // Here you would integrate with a payment service
-                    Alert.alert('Success!', `Welcome to ${forum.name}!`);
-                  }
-                }
-              ]
-            );
-          }
-        }
-      ]
-    );
   };
+
+  const handleJoinForum = async (forum: any) => {
+    if (!user) {
+      Alert.alert('Login Required', 'Please log in to join forums');
+      return;
+    }
+
+    try {
+      const response = await predictionForumsAPI.joinPredictionForum(forum._id);
+      if (response.success) {
+        Alert.alert('Success', `You've joined ${forum.name}!`);
+        fetchForums();
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to join forum');
+    }
+  };
+
+  const handleViewForum = (forum: any) => {
+    router.push({
+      pathname: '/prediction-forum-detail',
+      params: { id: forum._id }
+    });
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Prediction Forums</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading forums...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-   
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
         <Text style={styles.headerTitle}>Prediction Forums</Text>
         <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.introSection}>
-          <Text style={styles.introTitle}>Join Expert Prediction Forums</Text>
+          <Text style={styles.introTitle}>Expert Prediction Forums</Text>
           <Text style={styles.introDescription}>
             Connect with top football analysts, get exclusive insights, and improve your prediction accuracy
           </Text>
         </View>
 
-        {forums.map((forum) => (
-          <TouchableOpacity
-            key={forum.id}
-            style={[styles.forumCard, { borderColor: forum.color }]}
-            onPress={() => setSelectedForum(selectedForum === forum.id ? null : forum.id)}
-          >
-            <View style={styles.forumHeader}>
-              <View style={styles.forumIconContainer}>
-                <Text style={styles.forumIcon}>{forum.icon}</Text>
-              </View>
-              <View style={styles.forumInfo}>
-                <Text style={styles.forumName}>{forum.name}</Text>
-                <Text style={styles.forumDescription}>{forum.description}</Text>
-                <View style={styles.forumStats}>
-                  <Text style={styles.memberCount}>{forum.members} members</Text>
-                  <Text style={styles.forumPrice}>${forum.price}/month</Text>
+        {forums.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyText}>No prediction forums yet</Text>
+            <Text style={styles.emptySubtext}>Check back later for new forums!</Text>
+          </View>
+        ) : (
+          forums.map((forum) => {
+            const isMember = user && forum.members?.some((m: any) => 
+              (typeof m === 'string' ? m : m._id) === user._id
+            );
+            const isHead = user && forum.headUserId?._id === user._id;
+
+            return (
+              <TouchableOpacity
+                key={forum._id}
+                style={styles.forumCard}
+                onPress={() => handleViewForum(forum)}
+              >
+                <View style={styles.forumHeader}>
+                  {forum.profilePicture ? (
+                    <Image source={{ uri: forum.profilePicture }} style={styles.forumImage} />
+                  ) : (
+                    <View style={styles.forumIconContainer}>
+                      <Ionicons name="trophy" size={24} color="#3B82F6" />
+                    </View>
+                  )}
+                  <View style={styles.forumInfo}>
+                    <Text style={styles.forumName}>{forum.name}</Text>
+                    <Text style={styles.forumDescription} numberOfLines={2}>
+                      {forum.description || 'No description available'}
+                    </Text>
+                    <View style={styles.forumStats}>
+                      <View style={styles.statItem}>
+                        <Ionicons name="people" size={14} color="#3B82F6" />
+                        <Text style={styles.memberCount}>{forum.memberCount || 0} members</Text>
+                      </View>
+                      {isHead && (
+                        <View style={styles.headBadge}>
+                          <Text style={styles.headBadgeText}>Head</Text>
+                        </View>
+                      )}
+                      {isMember && !isHead && (
+                        <View style={styles.memberBadge}>
+                          <Text style={styles.memberBadgeText}>Member</Text>
+                        </View>
+                      )}
+                    </View>
+                    {forum.headUserId && (
+                      <View style={styles.headInfo}>
+                        <Text style={styles.headLabel}>Head: </Text>
+                        <Text style={styles.headName}>{forum.headUserId.username}</Text>
+                      </View>
+                    )}
+                  </View>
+                  <Ionicons name="chevron-forward" size={20} color="#9CA3AF" />
                 </View>
-              </View>
-              <View style={styles.expandIcon}>
-                <Ionicons 
-                  name={selectedForum === forum.id ? "chevron-up" : "chevron-down"} 
-                  size={20} 
-                  color="#9CA3AF" 
-                />
-              </View>
-            </View>
-
-            {selectedForum === forum.id && (
-              <View style={styles.forumDetails}>
-                <Text style={styles.featuresTitle}>Features:</Text>
-                {forum.features.map((feature, index) => (
-                  <Text key={index} style={styles.featureItem}>• {feature}</Text>
-                ))}
-                <TouchableOpacity
-                  style={[styles.joinButton, { backgroundColor: forum.color }]}
-                  onPress={() => handleJoinForum(forum)}
-                >
-                  <Text style={styles.joinButtonText}>Join Forum</Text>
-                </TouchableOpacity>
-              </View>
-            )}
-          </TouchableOpacity>
-        ))}
-
-        <View style={styles.footer}>
-          <Text style={styles.footerText}>
-            All forums include 7-day free trial. Cancel anytime.
-          </Text>
-        </View>
+              </TouchableOpacity>
+            );
+          })
+        )}
       </ScrollView>
     </SafeAreaView>
   );
@@ -214,13 +207,46 @@ const styles = StyleSheet.create({
     backgroundColor: '#2D3748',
     borderRadius: 12,
     marginBottom: 15,
-    borderWidth: 2,
-    overflow: 'hidden',
+    padding: 15,
   },
   forumHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 15,
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    marginTop: 10,
+    color: '#9CA3AF',
+    fontSize: 16,
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  emptyText: {
+    fontSize: 18,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+    marginTop: 15,
+  },
+  emptySubtext: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    marginTop: 5,
+  },
+  forumImage: {
+    width: 50,
+    height: 50,
+    borderRadius: 25,
+    marginRight: 15,
   },
   forumIconContainer: {
     width: 50,
@@ -230,9 +256,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     marginRight: 15,
-  },
-  forumIcon: {
-    fontSize: 24,
   },
   forumInfo: {
     flex: 1,
@@ -254,46 +277,53 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
+  statItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 10,
+  },
   memberCount: {
     fontSize: 12,
     color: '#3B82F6',
+    marginLeft: 4,
   },
-  forumPrice: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#10B981',
+  headBadge: {
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 'auto',
   },
-  expandIcon: {
-    padding: 5,
-  },
-  forumDetails: {
-    padding: 15,
-    paddingTop: 0,
-    borderTopWidth: 1,
-    borderTopColor: '#4A5568',
-  },
-  featuresTitle: {
-    fontSize: 16,
+  headBadgeText: {
+    fontSize: 10,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
-    marginBottom: 10,
   },
-  featureItem: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginBottom: 5,
+  memberBadge: {
+    backgroundColor: '#10B981',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 12,
+    marginLeft: 'auto',
   },
-  joinButton: {
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
+  memberBadgeText: {
+    fontSize: 10,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+  },
+  headInfo: {
+    flexDirection: 'row',
+    marginTop: 8,
     alignItems: 'center',
-    marginTop: 15,
   },
-  joinButtonText: {
-    fontSize: 16,
+  headLabel: {
+    fontSize: 12,
+    color: '#9CA3AF',
+  },
+  headName: {
+    fontSize: 12,
     fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
+    color: '#3B82F6',
   },
   footer: {
     paddingVertical: 20,

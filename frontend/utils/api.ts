@@ -296,6 +296,121 @@ export const liveMatchesAPI = {
   },
 };
 
+// Prediction Forums API
+export const predictionForumsAPI = {
+  getPredictionForums: async () => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.BASE);
+  },
+  getPredictionForum: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.BY_ID(id));
+  },
+  getForumByHead: async (userId: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.BY_HEAD(userId));
+  },
+  getAllUsers: async () => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.USERS_LIST);
+  },
+  createPredictionForum: async (data: { name: string; description?: string; headUserId: string }) => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.BASE, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  updatePredictionForum: async (id: string, data: { name?: string; description?: string; profilePicture?: string }) => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.BY_ID(id), {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  joinPredictionForum: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.JOIN(id), {
+      method: 'POST',
+    });
+  },
+  deletePredictionForum: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.BY_ID(id), {
+      method: 'DELETE',
+    });
+  },
+};
+
+// Predictions API
+export const predictionsAPI = {
+  getAllPredictions: async (params?: { status?: string; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const query = queryParams.toString();
+    return apiRequest(`${API_ENDPOINTS.PREDICTIONS.BASE}${query ? `?${query}` : ''}`);
+  },
+  getPredictionsByForum: async (forumId: string, params?: { status?: string; limit?: number }) => {
+    const queryParams = new URLSearchParams();
+    if (params?.status) queryParams.append('status', params.status);
+    if (params?.limit) queryParams.append('limit', params.limit.toString());
+    const query = queryParams.toString();
+    return apiRequest(`${API_ENDPOINTS.PREDICTIONS.BY_FORUM(forumId)}${query ? `?${query}` : ''}`);
+  },
+  getPrediction: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTIONS.BY_ID(id));
+  },
+  createPrediction: async (data: {
+    forumId: string;
+    team1: { name: string; logo?: string };
+    team2: { name: string; logo?: string };
+    predictedScore: { team1: number; team2: number };
+    matchDate: string;
+    league?: string;
+    competition?: string;
+    odds?: number;
+    predictionType?: string;
+    additionalInfo?: string;
+  }) => {
+    return apiRequest(API_ENDPOINTS.PREDICTIONS.BASE, {
+      method: 'POST',
+      body: JSON.stringify(data),
+    });
+  },
+  updatePrediction: async (id: string, data: {
+    team1?: { name?: string; logo?: string };
+    team2?: { name?: string; logo?: string };
+    predictedScore?: { team1?: number; team2?: number };
+    matchDate?: string;
+    league?: string;
+    competition?: string;
+    odds?: number;
+    predictionType?: string;
+    additionalInfo?: string;
+    status?: string;
+  }) => {
+    return apiRequest(API_ENDPOINTS.PREDICTIONS.BY_ID(id), {
+      method: 'PUT',
+      body: JSON.stringify(data),
+    });
+  },
+  updatePredictionResult: async (id: string, actualScore: { team1: number; team2: number }) => {
+    return apiRequest(API_ENDPOINTS.PREDICTIONS.RESULT(id), {
+      method: 'PUT',
+      body: JSON.stringify({ actualScore }),
+    });
+  },
+  addComment: async (id: string, message: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTIONS.COMMENTS(id), {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+  likePrediction: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTIONS.LIKE(id), {
+      method: 'POST',
+    });
+  },
+  deletePrediction: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTIONS.BY_ID(id), {
+      method: 'DELETE',
+    });
+  },
+};
+
 // Chat API
 export const chatAPI = {
   getMessages: async () => {
@@ -496,12 +611,12 @@ export const preloadAPI = {
     // Process results
     settled.forEach((result, index) => {
       if (result.status === 'fulfilled') {
-        const { key, data, error } = result.value;
-        if (error) {
-          console.warn(`Preload failed for ${key}:`, error);
-          results[key] = { error };
+        const value = result.value as { key: string; data?: any; error?: any };
+        if (value.error) {
+          console.warn(`Preload failed for ${value.key}:`, value.error);
+          results[value.key] = { error: value.error };
         } else {
-          results[key] = { data };
+          results[value.key] = { data: value.data };
         }
       } else {
         console.warn(`Preload promise rejected:`, result.reason);

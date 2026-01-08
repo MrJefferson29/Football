@@ -117,7 +117,7 @@ export default function HomeScreen() {
   )
   const limitedHighlights = filteredHighlights.slice(0, 2)
   const announcementText = 
-  "Yamal told ‘real hurdle’ he must clear to emulate Messi & CR7";
+  ". Yamal told ‘real hurdle’ he must clear to emulate Messi & CR7. Yamal told ‘real hurdle’ he must clear to emulate Messi & CR7";
 const MarqueeComponent = ({ text }: { text: string }) => {
   const { width: screenWidth } = useWindowDimensions()
   const scrollX = useRef(new Animated.Value(0)).current

@@ -41,6 +41,8 @@ app.use('/api/statistics', require('./routes/statistics'));
 app.use('/api/upload', require('./routes/upload'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
+app.use('/api/prediction-forums', require('./routes/predictionForums'));
+app.use('/api/predictions', require('./routes/predictions'));
 
 // Socket.io for real-time chat
 io.on('connection', (socket) => {

@@ -466,19 +466,34 @@ export default function CommunityScreen() {
           {!isMe && (
             <Text style={styles.messageUser}>{item.userId.username}</Text>
           )}
-          {/* Updated Reply Preview - Clickable */}
+          {/* Updated Reply Preview - Clickable with conditional styling */}
           {replyToMessage && (
             <TouchableOpacity 
-              style={styles.replyPreviewInBubble}
+              style={[
+                styles.replyPreviewInBubble,
+                isMe ? styles.myReplyPreview : styles.theirReplyPreview
+              ]}
               onPress={() => scrollToMessage(replyToMessage._id)}
               activeOpacity={0.8}
             >
-              <View style={styles.replySideBar} />
+              <View style={[styles.replySideBar, isMe && { backgroundColor: '#FFFFFF' }]} />
               <View style={styles.replyPreviewContent}>
-                <Text style={styles.replyPreviewUser} numberOfLines={1}>
+                <Text 
+                  style={[
+                    styles.replyPreviewUser,
+                    isMe ? styles.myReplyUserText : styles.theirReplyUserText
+                  ]} 
+                  numberOfLines={1}
+                >
                   {replyToMessage.userId?.username || 'User'}
                 </Text>
-                <Text style={styles.replyPreviewText} numberOfLines={1}>
+                <Text 
+                  style={[
+                    styles.replyPreviewText,
+                    isMe ? styles.myReplyBodyText : styles.theirReplyBodyText
+                  ]} 
+                  numberOfLines={1}
+                >
                   {replyToMessage.message || 'Image'}
                 </Text>
               </View>
@@ -846,21 +861,53 @@ const styles = StyleSheet.create({
   },
   replyPreviewInBubble: {
     flexDirection: 'row',
-    backgroundColor: 'rgba(0, 0, 0, 0.05)',
     borderRadius: 8,
-    marginBottom: 6,
+    marginBottom: 8,
     overflow: 'hidden',
-    maxHeight: 50,
+    maxHeight: 60,
+  },
+  // Background for replies in MY messages (Blue bubble)
+  myReplyPreview: {
+    backgroundColor: 'rgba(255, 255, 255, 0.15)',
+  },
+  // Background for replies in THEIR messages (Dark bubble)
+  theirReplyPreview: {
+    backgroundColor: 'rgba(0, 0, 0, 0.2)',
   },
   replySideBar: {
     width: 4,
-    backgroundColor: '#3B82F6',
+    backgroundColor: '#3B82F6', // Default blue bar
   },
   replyPreviewContent: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
     flex: 1,
   },
+  // Text styles for MY replies
+  myReplyUserText: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  myReplyBodyText: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: 'rgba(255, 255, 255, 0.8)',
+  },
+  // Text styles for THEIR replies
+  theirReplyUserText: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemiBold,
+    color: '#3B82F6',
+    marginBottom: 2,
+  },
+  theirReplyBodyText: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+  },
+  // Legacy styles for backward compatibility (if needed)
   replyPreviewUser: {
     fontSize: 12,
     fontFamily: fonts.bodySemiBold,

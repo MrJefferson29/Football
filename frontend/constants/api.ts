@@ -85,6 +85,23 @@ export const API_ENDPOINTS = {
   LEADERBOARD: {
     BASE: `${API_BASE_URL}/leaderboard`,
   },
+  // Prediction Forums
+  PREDICTION_FORUMS: {
+    BASE: `${API_BASE_URL}/prediction-forums`,
+    BY_ID: (id: string) => `${API_BASE_URL}/prediction-forums/${id}`,
+    BY_HEAD: (userId: string) => `${API_BASE_URL}/prediction-forums/head/${userId}`,
+    USERS_LIST: `${API_BASE_URL}/prediction-forums/users/list`,
+    JOIN: (id: string) => `${API_BASE_URL}/prediction-forums/${id}/join`,
+  },
+  // Predictions
+  PREDICTIONS: {
+    BASE: `${API_BASE_URL}/predictions`,
+    BY_ID: (id: string) => `${API_BASE_URL}/predictions/${id}`,
+    BY_FORUM: (forumId: string) => `${API_BASE_URL}/predictions/forum/${forumId}`,
+    RESULT: (id: string) => `${API_BASE_URL}/predictions/${id}/result`,
+    COMMENTS: (id: string) => `${API_BASE_URL}/predictions/${id}/comments`,
+    LIKE: (id: string) => `${API_BASE_URL}/predictions/${id}/like`,
+  },
 };
 
 // Socket.io URL
