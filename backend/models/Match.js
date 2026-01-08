@@ -32,7 +32,7 @@ const matchSchema = new mongoose.Schema({
   },
   leagueType: {
     type: String,
-    enum: ['international', 'local'],
+    enum: ['international', 'local', 'inter-quarter'],
     default: 'international'
   },
   status: {

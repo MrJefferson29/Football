@@ -63,50 +63,7 @@ export default function HomeScreen() {
     }
   }
 
-  const leadersData = [
-    {
-      rank: 1,
-      name: "Alex Johnson",
-      avatar: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
-      accuracy: 94,
-      points: 2847,
-    },
-    {
-      rank: 2,
-      name: "Sarah Wilson",
-      avatar: "https://images.unsplash.com/photo-1494790108755-2616b612b786?w=150&h=150&fit=crop&crop=face",
-      accuracy: 92,
-      points: 2653,
-    },
-    {
-      rank: 3,
-      name: "Mike Chen",
-      avatar: "https://images.unsplash.com/photo-1472099645785-5658abf4ff4e?w=150&h=150&fit=crop&crop=face",
-      accuracy: 90,
-      points: 2489,
-    },
-    {
-      rank: 4,
-      name: "Emma Davis",
-      avatar: "https://images.unsplash.com/photo-1438761681033-6461ffad8d80?w=150&h=150&fit=crop&crop=face",
-      accuracy: 88,
-      points: 2312,
-    },
-    {
-      rank: 5,
-      name: "David Brown",
-      avatar: "https://images.unsplash.com/photo-1500648767791-00dcc994a43e?w=150&h=150&fit=crop&crop=face",
-      accuracy: 87,
-      points: 2156,
-    },
-    {
-      rank: 6,
-      name: "Lisa Garcia",
-      avatar: "https://images.unsplash.com/photo-1544005313-94ddf0286df2?w=150&h=150&fit=crop&crop=face",
-      accuracy: 85,
-      points: 1987,
-    },
-  ]
+  const leadersData = homeData?.predictionLeaders || []
 
   const todayMatches = homeData?.todayMatches || []
   const youtubeVideos = homeData?.highlights || []
@@ -674,29 +631,60 @@ const MarqueeComponent = ({ text }: { text: string }) => {
         </View>
 
         {/* Leaders Board Carousel */}
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>🏆 Prediction Leaders</Text>
-          <View style={styles.carouselContainer}>
-            <ScrollView
-              horizontal
-              showsHorizontalScrollIndicator={false}
-              style={styles.carousel}
-              contentContainerStyle={styles.carouselContent}
-            >
-              {leadersData.map((leader, index) => (
-                <View key={index} style={styles.leaderCard}>
-                  <View style={styles.leaderRank}>
-                    <Text style={styles.rankNumber}>#{leader.rank}</Text>
-                  </View>
-                  <Image source={{ uri: leader.avatar }} style={styles.leaderAvatar} />
-                  <Text style={styles.leaderName}>{leader.name}</Text>
-                  <Text style={styles.leaderStats}>{leader.accuracy}% accuracy</Text>
-                  <Text style={styles.leaderPoints}>{leader.points} pts</Text>
-                </View>
-              ))}
-            </ScrollView>
+        {leadersData.length > 0 && (
+          <View style={styles.section}>
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionTitle}>🏆 Prediction Leaders</Text>
+              <Text style={styles.sectionSubtitle}>Top Forum Heads</Text>
+            </View>
+            <View style={styles.carouselContainer}>
+              <ScrollView
+                horizontal
+                showsHorizontalScrollIndicator={false}
+                style={styles.carousel}
+                contentContainerStyle={styles.carouselContent}
+              >
+                {leadersData.map((leader: any, index: number) => (
+                  <TouchableOpacity 
+                    key={leader.id || index} 
+                    style={styles.leaderCard}
+                    onPress={() => router.push(`/prediction-forums`)}
+                  >
+                    <View style={styles.leaderRank}>
+                      <Text style={styles.rankNumber}>#{leader.position || index + 1}</Text>
+                      {leader.position === 1 && (
+                        <Ionicons name="trophy" size={16} color="#FFD700" style={{ marginLeft: 4 }} />
+                      )}
+                    </View>
+                    {leader.avatar ? (
+                      <Image source={{ uri: leader.avatar }} style={styles.leaderAvatar} />
+                    ) : (
+                      <View style={styles.leaderAvatarPlaceholder}>
+                        <Text style={styles.leaderAvatarText}>
+                          {leader.username?.charAt(0)?.toUpperCase() || '?'}
+                        </Text>
+                      </View>
+                    )}
+                    <Text style={styles.leaderName} numberOfLines={1}>
+                      {leader.username || 'Unknown'}
+                    </Text>
+                    <Text style={styles.leaderStats}>
+                      {leader.accuracy || 0}% accuracy
+                    </Text>
+                    <Text style={styles.leaderPoints}>
+                      {leader.points || 0} pts
+                    </Text>
+                    {leader.rank && (
+                      <View style={styles.leaderRankBadge}>
+                        <Text style={styles.leaderRankText}>{leader.rank}</Text>
+                      </View>
+                    )}
+                  </TouchableOpacity>
+                ))}
+              </ScrollView>
+            </View>
           </View>
-        </View>
+        )}
 
         {/* Prediction Forum Box */}
         <View style={styles.section}>
@@ -1165,26 +1153,32 @@ const styles = StyleSheet.create({
     paddingRight: 20,
   },
   leaderCard: {
-    width: 100,
-    height: 100,
- backgroundColor: "#0c1322",
+    width: 120,
+    minHeight: 140,
+    backgroundColor: "#0c1322",
     borderRadius: 12,
     marginRight: 15,
     alignItems: "center",
-    justifyContent: "center",
-    padding: 8,
+    justifyContent: "flex-start",
+    padding: 12,
+    paddingTop: 32,
     position: "relative",
+    borderWidth: 1,
+    borderColor: "#2D3748",
   },
   leaderRank: {
     position: "absolute",
     top: 4,
     right: 4,
     backgroundColor: "#F59E0B",
-    borderRadius: 10,
-    width: 20,
-    height: 20,
+    borderRadius: 12,
+    minWidth: 24,
+    height: 24,
+    paddingHorizontal: 6,
     alignItems: "center",
     justifyContent: "center",
+    flexDirection: "row",
+    zIndex: 1,
   },
   rankNumber: {
     fontSize: 10,
@@ -1196,6 +1190,21 @@ const styles = StyleSheet.create({
     height: 40,
     borderRadius: 20,
     marginBottom: 4,
+    backgroundColor: "#2D3748",
+  },
+  leaderAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginBottom: 4,
+    backgroundColor: "#3B82F6",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  leaderAvatarText: {
+    fontSize: 16,
+    fontFamily: fonts.heading,
+    color: "#FFFFFF",
   },
   leaderName: {
     fontSize: 10,
@@ -1203,6 +1212,7 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
     textAlign: "center",
     marginBottom: 2,
+    maxWidth: 90,
   },
   leaderStats: {
     fontSize: 8,
@@ -1217,11 +1227,28 @@ const styles = StyleSheet.create({
     color: "#3B82F6",
     textAlign: "center",
   },
+  leaderRankBadge: {
+    marginTop: 4,
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    backgroundColor: "#F59E0B20",
+    borderRadius: 8,
+  },
+  leaderRankText: {
+    fontSize: 8,
+    fontFamily: fonts.bodySemiBold,
+    color: "#FBBF24",
+  },
   sectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
+    flexDirection: "column",
     marginBottom: 15,
+    gap: 4,
+  },
+  sectionSubtitle: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: "#9CA3AF",
+    marginTop: 2,
   },
   seeAllText: {
     fontSize: 14,

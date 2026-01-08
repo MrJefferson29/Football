@@ -4,6 +4,8 @@ const Highlight = require('../models/Highlight');
 const News = require('../models/News');
 const FanGroup = require('../models/FanGroup');
 const LiveMatch = require('../models/LiveMatch');
+const PredictionForum = require('../models/PredictionForum');
+const User = require('../models/User');
 
 // @desc    Get all data for home/index screen
 // @route   GET /api/home
@@ -25,7 +27,8 @@ exports.getHomeData = async (req, res) => {
       highlights,
       trendingNews,
       fanGroups,
-      liveMatches
+      liveMatches,
+      predictionLeaders
     ] = await Promise.all([
       // Daily Poll
       Poll.findOne({ type: 'daily-poll', isActive: true }).sort({ createdAt: -1 }),
@@ -55,7 +58,32 @@ exports.getHomeData = async (req, res) => {
         .populate('comments.userId', 'username avatar')
         .populate('comments.replies.userId', 'username avatar')
         .sort({ createdAt: -1 })
-        .limit(1)
+        .limit(1),
+      
+      // Prediction Leaders (Forum Heads sorted by points)
+      (async () => {
+        // Get all forum heads
+        const forums = await PredictionForum.find({ isActive: true })
+          .select('headUserId')
+          .populate('headUserId', 'username avatar points correctPredictions totalPredictions rank');
+        
+        // Extract unique forum heads and sort by points
+        const leaderMap = new Map();
+        forums.forEach(forum => {
+          if (forum.headUserId && typeof forum.headUserId === 'object') {
+            const head = forum.headUserId;
+            if (!leaderMap.has(head._id.toString())) {
+              leaderMap.set(head._id.toString(), head);
+            }
+          }
+        });
+        
+        const leaders = Array.from(leaderMap.values())
+          .sort((a, b) => (b.points || 0) - (a.points || 0))
+          .slice(0, 10); // Top 10 leaders
+        
+        return leaders;
+      })()
     ]);
 
     res.status(200).json({
@@ -177,6 +205,19 @@ exports.getHomeData = async (req, res) => {
           awayScore: match.awayScore,
           matchTime: match.matchTime,
           comments: match.comments
+        })),
+        predictionLeaders: predictionLeaders.map((leader, index) => ({
+          position: index + 1,
+          id: leader._id,
+          username: leader.username,
+          avatar: leader.avatar,
+          points: leader.points || 0,
+          correctPredictions: leader.correctPredictions || 0,
+          totalPredictions: leader.totalPredictions || 0,
+          accuracy: leader.totalPredictions > 0 
+            ? Math.round((leader.correctPredictions || 0) / leader.totalPredictions * 100) 
+            : 0,
+          rank: leader.rank || 'Bronze'
         }))
       }
     });

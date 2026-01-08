@@ -89,7 +89,7 @@ export default function GOATCompetitionScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Competition Statistics</Text>
+          <Text style={styles.headerTitle}>Gamefy Statistics</Text>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -107,7 +107,7 @@ export default function GOATCompetitionScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Competition Statistics</Text>
+          <Text style={styles.headerTitle}>Gamefy Statistics</Text>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -124,7 +124,7 @@ export default function GOATCompetitionScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{poll.question} Statistics</Text>
+          <Text style={styles.headerTitle}>Gamefy Statistics</Text>
           <TouchableOpacity 
             onPress={handleShare} 
             disabled={isCapturing || loading}

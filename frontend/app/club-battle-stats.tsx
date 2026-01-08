@@ -28,10 +28,10 @@ export default function ClubBattleStatsScreen() {
       if (response.success && response.data) {
         setPoll(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load club battle statistics');
+        Alert.alert('Error', 'Failed to load statistics, refresh the app');
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load club battle statistics');
+      Alert.alert('Error', error.message || 'Failed to load statistics, refresh the app');
     } finally {
       setLoading(false);
     }
@@ -69,7 +69,7 @@ export default function ClubBattleStatsScreen() {
       if (isAvailable) {
         await Sharing.shareAsync(uri, {
           mimeType: 'image/png',
-          dialogTitle: 'Share Club Battle Statistics',
+          dialogTitle: 'Share Statistics',
         });
       } else {
         Alert.alert('Error', 'Sharing is not available on this device');
@@ -89,7 +89,7 @@ export default function ClubBattleStatsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Club Battle Statistics</Text>
+          <Text style={styles.headerTitle}>Gamefy Poll</Text>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -107,7 +107,7 @@ export default function ClubBattleStatsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{poll.question} Statistics</Text>
+          <Text style={styles.headerTitle}>Gamefy Poll</Text>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -124,7 +124,7 @@ export default function ClubBattleStatsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>{poll.question} Statistics</Text>
+          <Text style={styles.headerTitle}>Gamefy Poll</Text>
           <TouchableOpacity 
             onPress={handleShare} 
             disabled={isCapturing || loading}
@@ -353,7 +353,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 24,
     fontFamily: fonts.heading,
     color: '#FFFFFF',
   },
@@ -383,7 +383,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#3B82F6',
   },
   tabText: {
-    fontSize: 14,
+    fontSize: 10,
     fontFamily: fonts.bodyMedium,
     color: '#9CA3AF',
   },

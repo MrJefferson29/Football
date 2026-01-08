@@ -147,18 +147,43 @@ export default function PredictionDetailScreen() {
   const isHead = user && prediction.headUserId?._id === user._id;
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Prediction</Text>
+        <Text style={styles.headerTitle}>Prediction Details</Text>
         <View style={styles.placeholder} />
       </View>
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Prediction Card */}
         <View style={styles.predictionCard}>
+          {/* Status Badge - Top */}
+          <View style={styles.statusContainerTop}>
+            <View style={[
+              styles.statusBadge,
+              isPending && styles.pendingBadge,
+              isCompleted && isCorrect && styles.correctBadge,
+              isCompleted && !isCorrect && styles.incorrectBadge
+            ]}>
+              <Ionicons 
+                name={isPending ? 'time-outline' : isCorrect ? 'checkmark-circle' : 'close-circle'} 
+                size={16} 
+                color={isPending ? '#F59E0B' : isCorrect ? '#10B981' : '#EF4444'} 
+              />
+              <Text style={[
+                styles.statusText,
+                isPending && styles.pendingText,
+                isCompleted && isCorrect && styles.correctText,
+                isCompleted && !isCorrect && styles.incorrectText
+              ]}>
+                {isPending ? 'Pending' : isCorrect ? 'Correct' : 'Incorrect'}
+              </Text>
+            </View>
+          </View>
+
           {/* Teams */}
           <View style={styles.teamsContainer}>
             <View style={styles.team}>
@@ -169,11 +194,14 @@ export default function PredictionDetailScreen() {
                   <Text style={styles.teamLogoText}>{prediction.team1.name.charAt(0)}</Text>
                 </View>
               )}
-              <Text style={styles.teamName}>{prediction.team1.name}</Text>
+              <Text style={styles.teamName} numberOfLines={2}>{prediction.team1.name}</Text>
             </View>
 
             <View style={styles.vsContainer}>
-              <Text style={styles.vsText}>VS</Text>
+              <View style={styles.vsCircle}>
+                <Text style={styles.vsText}>VS</Text>
+              </View>
+              <View style={styles.scoreDivider} />
             </View>
 
             <View style={styles.team}>
@@ -184,86 +212,100 @@ export default function PredictionDetailScreen() {
                   <Text style={styles.teamLogoText}>{prediction.team2.name.charAt(0)}</Text>
                 </View>
               )}
-              <Text style={styles.teamName}>{prediction.team2.name}</Text>
+              <Text style={styles.teamName} numberOfLines={2}>{prediction.team2.name}</Text>
             </View>
           </View>
 
           {/* Scores */}
           <View style={styles.scoresContainer}>
-            <View style={styles.scoreSection}>
-              <Text style={styles.scoreLabel}>Predicted Score</Text>
-              <Text style={styles.scoreValue}>
-                {prediction.predictedScore.team1} - {prediction.predictedScore.team2}
-              </Text>
-            </View>
-
-            {isCompleted && prediction.actualScore && (
-              <View style={styles.scoreSection}>
-                <Text style={styles.scoreLabel}>Actual Score</Text>
-                <Text style={[
-                  styles.scoreValue,
-                  isCorrect && styles.correctScore,
-                  !isCorrect && styles.incorrectScore
-                ]}>
-                  {prediction.actualScore.team1} - {prediction.actualScore.team2}
+            <View style={styles.scoreRow}>
+              <View style={styles.scoreBox}>
+                <Text style={styles.scoreLabel}>Predicted</Text>
+                <Text style={styles.scoreValue}>
+                  {prediction.predictedScore.team1} - {prediction.predictedScore.team2}
                 </Text>
               </View>
-            )}
-          </View>
 
-          {/* Status Badge */}
-          <View style={styles.statusContainer}>
-            <View style={[
-              styles.statusBadge,
-              isPending && styles.pendingBadge,
-              isCompleted && isCorrect && styles.correctBadge,
-              isCompleted && !isCorrect && styles.incorrectBadge
-            ]}>
-              <Text style={[
-                styles.statusText,
-                isPending && styles.pendingText,
-                isCompleted && isCorrect && styles.correctText,
-                isCompleted && !isCorrect && styles.incorrectText
-              ]}>
-                {isPending ? 'Pending' : isCorrect ? 'Correct ✓' : 'Incorrect ✗'}
-              </Text>
+              {isCompleted && prediction.actualScore && (
+                <View style={[
+                  styles.scoreBox,
+                  isCorrect && styles.scoreBoxCorrect,
+                  !isCorrect && styles.scoreBoxIncorrect
+                ]}>
+                  <Text style={styles.scoreLabel}>Actual</Text>
+                  <Text style={[
+                    styles.scoreValue,
+                    isCorrect && styles.correctScore,
+                    !isCorrect && styles.incorrectScore
+                  ]}>
+                    {prediction.actualScore.team1} - {prediction.actualScore.team2}
+                  </Text>
+                </View>
+              )}
             </View>
           </View>
 
           {/* Match Details */}
-          <View style={styles.detailsContainer}>
-            {prediction.league && (
-              <View style={styles.detailItem}>
-                <Ionicons name="trophy" size={16} color="#3B82F6" />
-                <Text style={styles.detailText}>{prediction.league}</Text>
-              </View>
-            )}
-            {prediction.competition && (
-              <View style={styles.detailItem}>
-                <Ionicons name="football" size={16} color="#3B82F6" />
-                <Text style={styles.detailText}>{prediction.competition}</Text>
-              </View>
-            )}
-            {prediction.matchDate && (
-              <View style={styles.detailItem}>
-                <Ionicons name="calendar" size={16} color="#3B82F6" />
-                <Text style={styles.detailText}>
-                  {new Date(prediction.matchDate).toLocaleString()}
-                </Text>
-              </View>
-            )}
-            {prediction.odds && (
-              <View style={styles.detailItem}>
-                <Ionicons name="trending-up" size={16} color="#3B82F6" />
-                <Text style={styles.detailText}>Odds: {prediction.odds}</Text>
-              </View>
-            )}
+          <View style={styles.detailsSection}>
+            <Text style={styles.sectionTitle}>Match Information</Text>
+            <View style={styles.detailsGrid}>
+              {prediction.league && (
+                <View style={styles.detailCard}>
+                  <View style={styles.detailIconContainer}>
+                    <Ionicons name="trophy" size={20} color="#3B82F6" />
+                  </View>
+                  <Text style={styles.detailLabel}>League</Text>
+                  <Text style={styles.detailText}>{prediction.league}</Text>
+                </View>
+              )}
+              {prediction.competition && (
+                <View style={styles.detailCard}>
+                  <View style={styles.detailIconContainer}>
+                    <Ionicons name="football" size={20} color="#10B981" />
+                  </View>
+                  <Text style={styles.detailLabel}>Competition</Text>
+                  <Text style={styles.detailText}>{prediction.competition}</Text>
+                </View>
+              )}
+              {prediction.matchDate && (
+                <View style={styles.detailCard}>
+                  <View style={styles.detailIconContainer}>
+                    <Ionicons name="calendar" size={20} color="#F59E0B" />
+                  </View>
+                  <Text style={styles.detailLabel}>Date & Time</Text>
+                  <Text style={styles.detailText}>
+                    {new Date(prediction.matchDate).toLocaleDateString('en-US', { 
+                      month: 'short', 
+                      day: 'numeric',
+                      year: 'numeric'
+                    })}
+                  </Text>
+                  <Text style={styles.detailTimeText}>
+                    {new Date(prediction.matchDate).toLocaleTimeString('en-US', { 
+                      hour: '2-digit', 
+                      minute: '2-digit' 
+                    })}
+                  </Text>
+                </View>
+              )}
+              {prediction.odds && (
+                <View style={styles.detailCard}>
+                  <View style={styles.detailIconContainer}>
+                    <Ionicons name="trending-up" size={20} color="#EF4444" />
+                  </View>
+                  <Text style={styles.detailLabel}>Odds</Text>
+                  <Text style={styles.detailText}>{prediction.odds}</Text>
+                </View>
+              )}
+            </View>
           </View>
 
           {prediction.additionalInfo && (
-            <View style={styles.additionalInfoContainer}>
-              <Text style={styles.additionalInfoLabel}>Additional Information</Text>
-              <Text style={styles.additionalInfoText}>{prediction.additionalInfo}</Text>
+            <View style={styles.additionalInfoSection}>
+              <Text style={styles.sectionTitle}>Additional Notes</Text>
+              <View style={styles.additionalInfoContainer}>
+                <Text style={styles.additionalInfoText}>{prediction.additionalInfo}</Text>
+              </View>
             </View>
           )}
 
@@ -273,68 +315,11 @@ export default function PredictionDetailScreen() {
               style={styles.actionButton}
               onPress={handleLike}
             >
-              <Ionicons name="heart" size={20} color="#EF4444" />
+              <Ionicons name="heart" size={22} color="#EF4444" />
               <Text style={styles.actionText}>{prediction.likes || 0}</Text>
+              <Text style={styles.actionLabel}>Likes</Text>
             </TouchableOpacity>
           </View>
-        </View>
-
-        {/* Comments Section */}
-        <View style={styles.commentsSection}>
-          <Text style={styles.commentsTitle}>
-            Comments ({prediction.comments?.length || 0})
-          </Text>
-
-          {prediction.comments && prediction.comments.length > 0 ? (
-            prediction.comments.map((comment: any) => (
-              <View key={comment._id || comment.createdAt} style={styles.commentItem}>
-                <View style={styles.commentHeader}>
-                  <Text style={styles.commentUser}>
-                    {comment.userId?.username || 'User'}
-                  </Text>
-                  <Text style={styles.commentTime}>
-                    {getTimeAgo(comment.createdAt)}
-                  </Text>
-                </View>
-                <Text style={styles.commentText}>{comment.message}</Text>
-              </View>
-            ))
-          ) : (
-            <View style={styles.emptyComments}>
-              <Text style={styles.emptyCommentsText}>
-                No comments yet. Be the first to comment!
-              </Text>
-            </View>
-          )}
-
-          {/* Add Comment */}
-          {user && (
-            <View style={styles.addCommentContainer}>
-              <TextInput
-                style={styles.commentInput}
-                placeholder="Add a comment..."
-                placeholderTextColor="#9CA3AF"
-                value={commentText}
-                onChangeText={setCommentText}
-                multiline
-                maxLength={500}
-              />
-              <TouchableOpacity
-                style={[
-                  styles.sendCommentButton,
-                  (!commentText.trim() || postingComment) && styles.sendCommentButtonDisabled
-                ]}
-                onPress={handleAddComment}
-                disabled={!commentText.trim() || postingComment}
-              >
-                {postingComment ? (
-                  <ActivityIndicator size="small" color="#FFFFFF" />
-                ) : (
-                  <Ionicons name="send" size={20} color="#FFFFFF" />
-                )}
-              </TouchableOpacity>
-            </View>
-          )}
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -344,19 +329,20 @@ export default function PredictionDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A202C',
+    backgroundColor: '#0B141A',
   },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    backgroundColor: '#202C33',
     borderBottomWidth: 1,
-    borderBottomColor: '#2D3748',
+    borderBottomColor: '#2A3942',
   },
   backButton: {
-    padding: 5,
+    padding: 8,
   },
   headerTitle: {
     fontSize: 18,
@@ -367,7 +353,7 @@ const styles = StyleSheet.create({
     textAlign: 'center',
   },
   placeholder: {
-    width: 34,
+    width: 40,
   },
   loadingContainer: {
     flex: 1,
@@ -377,7 +363,7 @@ const styles = StyleSheet.create({
   },
   loadingText: {
     marginTop: 10,
-    color: '#9CA3AF',
+    color: '#8696A0',
     fontSize: 16,
   },
   emptyContainer: {
@@ -394,92 +380,29 @@ const styles = StyleSheet.create({
   },
   content: {
     flex: 1,
-    paddingHorizontal: 20,
+    paddingHorizontal: 16,
   },
   predictionCard: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
+    backgroundColor: '#202C33',
+    borderRadius: 16,
     padding: 20,
-    marginTop: 20,
-  },
-  teamsContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
+    marginTop: 16,
     marginBottom: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+    elevation: 3,
   },
-  team: {
-    flex: 1,
+  statusContainerTop: {
     alignItems: 'center',
-  },
-  teamLogo: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    marginBottom: 10,
-  },
-  teamLogoPlaceholder: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 10,
-  },
-  teamLogoText: {
-    fontSize: 32,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
-  },
-  teamName: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  vsContainer: {
-    paddingHorizontal: 20,
-  },
-  vsText: {
-    fontSize: 18,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-  },
-  scoresContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 20,
-    paddingVertical: 15,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#4A5568',
-  },
-  scoreSection: {
-    alignItems: 'center',
-  },
-  scoreLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 8,
-  },
-  scoreValue: {
-    fontSize: 28,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
-  },
-  correctScore: {
-    color: '#10B981',
-  },
-  incorrectScore: {
-    color: '#EF4444',
-  },
-  statusContainer: {
-    alignItems: 'center',
-    marginBottom: 20,
+    marginBottom: 24,
   },
   statusBadge: {
-    paddingHorizontal: 20,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 16,
     paddingVertical: 8,
     borderRadius: 20,
   },
@@ -497,141 +420,216 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
   },
   pendingText: {
-    color: '#F59E0B',
+    color: '#FBBF24',
   },
   correctText: {
-    color: '#10B981',
+    color: '#34D399',
   },
   incorrectText: {
-    color: '#EF4444',
+    color: '#F87171',
   },
-  detailsContainer: {
-    marginBottom: 20,
-    gap: 10,
-  },
-  detailItem: {
+  teamsContainer: {
     flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 24,
+    paddingHorizontal: 8,
+  },
+  team: {
+    flex: 1,
+    alignItems: 'center',
+    gap: 12,
+  },
+  teamLogo: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#2A3942',
+  },
+  teamLogoPlaceholder: {
+    width: 90,
+    height: 90,
+    borderRadius: 45,
+    backgroundColor: '#2A3942',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  teamLogoText: {
+    fontSize: 36,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  teamName: {
+    fontSize: 15,
+    fontFamily: fonts.bodySemiBold,
+    color: '#E9EDEF',
+    textAlign: 'center',
+  },
+  vsContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 12,
+  },
+  vsCircle: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#2A3942',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 8,
+  },
+  vsText: {
+    fontSize: 14,
+    fontFamily: fonts.bodySemiBold,
+    color: '#8696A0',
+  },
+  scoreDivider: {
+    width: 1,
+    height: 60,
+    backgroundColor: '#2A3942',
+  },
+  scoresContainer: {
+    marginBottom: 24,
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#2A3942',
+  },
+  scoreRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    gap: 12,
+  },
+  scoreBox: {
+    flex: 1,
+    alignItems: 'center',
+    padding: 16,
+    backgroundColor: '#2A3942',
+    borderRadius: 12,
+    minHeight: 90,
+    justifyContent: 'center',
+  },
+  scoreBoxCorrect: {
+    backgroundColor: '#10B98115',
+    borderWidth: 1,
+    borderColor: '#10B98140',
+  },
+  scoreBoxIncorrect: {
+    backgroundColor: '#EF444415',
+    borderWidth: 1,
+    borderColor: '#EF444440',
+  },
+  scoreLabel: {
+    fontSize: 12,
+    color: '#8696A0',
+    marginBottom: 8,
+    fontFamily: fonts.body,
+  },
+  scoreValue: {
+    fontSize: 32,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  correctScore: {
+    color: '#34D399',
+  },
+  incorrectScore: {
+    color: '#F87171',
+  },
+  detailsSection: {
+    marginBottom: 24,
+  },
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+    marginBottom: 16,
+  },
+  detailsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+  },
+  detailCard: {
+    flex: 1,
+    minWidth: '45%',
+    backgroundColor: '#2A3942',
+    borderRadius: 12,
+    padding: 16,
     alignItems: 'center',
     gap: 8,
   },
+  detailIconContainer: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: '#1A202C',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginBottom: 4,
+  },
+  detailLabel: {
+    fontSize: 11,
+    color: '#8696A0',
+    fontFamily: fonts.body,
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
   detailText: {
     fontSize: 14,
-    color: '#9CA3AF',
+    fontFamily: fonts.bodySemiBold,
+    color: '#E9EDEF',
+    textAlign: 'center',
+  },
+  detailTimeText: {
+    fontSize: 12,
+    color: '#8696A0',
+    fontFamily: fonts.body,
+    marginTop: 2,
+  },
+  additionalInfoSection: {
+    marginBottom: 24,
   },
   additionalInfoContainer: {
-    marginBottom: 20,
-    padding: 15,
-    backgroundColor: '#1A202C',
-    borderRadius: 8,
-  },
-  additionalInfoLabel: {
-    fontSize: 14,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginBottom: 8,
+    padding: 16,
+    backgroundColor: '#2A3942',
+    borderRadius: 12,
+    borderLeftWidth: 3,
+    borderLeftColor: '#3B82F6',
   },
   additionalInfoText: {
     fontSize: 14,
-    color: '#9CA3AF',
-    lineHeight: 20,
+    fontFamily: fonts.body,
+    color: '#E9EDEF',
+    lineHeight: 22,
   },
   actionsContainer: {
     flexDirection: 'row',
     justifyContent: 'center',
-    paddingTop: 15,
+    paddingTop: 20,
     borderTopWidth: 1,
-    borderTopColor: '#4A5568',
+    borderTopColor: '#2A3942',
   },
   actionButton: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#374151',
-    borderRadius: 20,
-  },
-  actionText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-  },
-  commentsSection: {
-    marginTop: 30,
-    marginBottom: 20,
-  },
-  commentsTitle: {
-    fontSize: 20,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
-    marginBottom: 15,
-  },
-  commentItem: {
-    backgroundColor: '#2D3748',
-    borderRadius: 8,
-    padding: 15,
-    marginBottom: 10,
-  },
-  commentHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
-  },
-  commentUser: {
-    fontSize: 14,
-    fontFamily: fonts.bodySemiBold,
-    color: '#3B82F6',
-  },
-  commentTime: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  commentText: {
-    fontSize: 14,
-    color: '#FFFFFF',
-    lineHeight: 20,
-  },
-  emptyComments: {
-    paddingVertical: 30,
-    alignItems: 'center',
-  },
-  emptyCommentsText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    textAlign: 'center',
-  },
-  addCommentContainer: {
-    flexDirection: 'row',
-    alignItems: 'flex-end',
-    gap: 10,
-    marginTop: 15,
-    paddingTop: 15,
-    borderTopWidth: 1,
-    borderTopColor: '#4A5568',
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: '#2D3748',
-    borderRadius: 20,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    fontSize: 14,
-    fontFamily: fonts.body,
-    color: '#FFFFFF',
-    maxHeight: 100,
-  },
-  sendCommentButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 20,
-    padding: 10,
-    width: 40,
-    height: 40,
-    alignItems: 'center',
+    paddingHorizontal: 24,
+    paddingVertical: 12,
+    backgroundColor: '#2A3942',
+    borderRadius: 24,
+    minWidth: 120,
     justifyContent: 'center',
   },
-  sendCommentButtonDisabled: {
-    backgroundColor: '#4A5568',
-    opacity: 0.5,
+  actionText: {
+    fontSize: 18,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  actionLabel: {
+    fontSize: 12,
+    color: '#8696A0',
+    fontFamily: fonts.body,
+    marginLeft: 4,
   },
 });

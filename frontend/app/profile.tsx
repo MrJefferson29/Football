@@ -1,12 +1,13 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import React, { useState, useEffect } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator } from 'react-native';
+import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { fonts } from '@/utils/typography';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadAPI } from '@/utils/api';
+import * as Clipboard from 'expo-clipboard';
 
 export default function ProfileScreen() {
   const [activeTab, setActiveTab] = useState('profile');
@@ -59,6 +60,16 @@ export default function ProfileScreen() {
       Alert.alert('Error', error.message || 'Failed to update photo');
     } finally {
       setUploadingAvatar(false);
+    }
+  };
+
+  const copyToClipboard = async (text: string, type: 'code' | 'link' = 'code') => {
+    try {
+      await Clipboard.setStringAsync(text);
+      Alert.alert('Copied!', `${type === 'code' ? 'Referral code' : 'Referral link'} copied to clipboard`);
+    } catch (error: any) {
+      console.error('Copy error:', error);
+      Alert.alert('Error', 'Failed to copy to clipboard. Please copy manually: ' + text);
     }
   };
 
@@ -148,16 +159,40 @@ export default function ProfileScreen() {
       <View style={styles.referralCard}>
         <View style={styles.referralHeader}>
           <Ionicons name="gift-outline" size={22} color="#3B82F6" />
-          <Text style={styles.referralTitle}>Your Referral Link</Text>
+          <Text style={styles.referralTitle}>Your Referral Code</Text>
         </View>
-        <Text style={styles.referralCode}>
-          {referralCode ? `Code: ${referralCode}` : 'No referral code yet'}
-        </Text>
-        <Text style={styles.referralLink}>
-          {referralLink}
-        </Text>
+        {referralCode ? (
+          <>
+            <View style={styles.referralCodeContainer}>
+              <Text style={styles.referralCode}>{referralCode}</Text>
+              <TouchableOpacity
+                style={styles.copyButton}
+                onPress={() => copyToClipboard(referralCode, 'code')}
+              >
+                <Ionicons name="copy-outline" size={20} color="#3B82F6" />
+                <Text style={styles.copyButtonText}>Copy Code</Text>
+              </TouchableOpacity>
+            </View>
+            <View style={styles.referralLinkContainer}>
+              <Text style={styles.referralLinkLabel}>Referral Link:</Text>
+              <View style={styles.referralLinkRow}>
+                <Text style={styles.referralLink} numberOfLines={1}>
+                  {referralLink}
+                </Text>
+                <TouchableOpacity
+                  style={styles.copyIconButton}
+                  onPress={() => copyToClipboard(referralLink, 'link')}
+                >
+                  <Ionicons name="copy-outline" size={18} color="#3B82F6" />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </>
+        ) : (
+          <Text style={styles.noReferralCode}>No referral code available</Text>
+        )}
         <Text style={styles.referralHint}>
-          Share this link or code to earn points when friends join.
+          Share your referral code or link to earn 50 points when friends join using it!
         </Text>
       </View>
 
@@ -515,7 +550,7 @@ const styles = StyleSheet.create({
   referralHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: 12,
   },
   referralTitle: {
     marginLeft: 8,
@@ -523,22 +558,71 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
   },
+  referralCodeContainer: {
+    marginBottom: 12,
+  },
   referralCode: {
-    fontSize: 16,
+    fontSize: 24,
+    fontFamily: fonts.heading,
+    color: '#3B82F6',
+    letterSpacing: 2,
+    marginBottom: 10,
+    textAlign: 'center',
+  },
+  copyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3B82F6',
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    gap: 6,
+  },
+  copyButtonText: {
+    fontSize: 14,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
-    marginBottom: 4,
   },
-  referralLink: {
-    fontSize: 14,
+  referralLinkContainer: {
+    marginBottom: 12,
+  },
+  referralLinkLabel: {
+    fontSize: 12,
     fontFamily: fonts.body,
     color: '#9CA3AF',
     marginBottom: 6,
+  },
+  referralLinkRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#1A202C',
+    borderRadius: 8,
+    padding: 10,
+    gap: 8,
+  },
+  referralLink: {
+    flex: 1,
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#E9EDEF',
+  },
+  copyIconButton: {
+    padding: 4,
+  },
+  noReferralCode: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    textAlign: 'center',
+    paddingVertical: 20,
   },
   referralHint: {
     fontSize: 12,
     fontFamily: fonts.body,
     color: '#9CA3AF',
+    marginTop: 4,
+    lineHeight: 16,
   },
   logoutButton: {
     flexDirection: 'row',

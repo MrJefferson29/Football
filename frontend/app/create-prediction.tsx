@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -11,11 +11,13 @@ import {
   TouchableOpacity,
   View,
   Platform,
-  Image
+  Image,
+  Modal,
+  FlatList
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
-import { predictionsAPI, uploadAPI } from '@/utils/api';
+import { predictionsAPI, uploadAPI, matchesAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -25,6 +27,10 @@ export default function CreatePredictionScreen() {
   const [saving, setSaving] = useState(false);
   const [uploadingTeam1Logo, setUploadingTeam1Logo] = useState(false);
   const [uploadingTeam2Logo, setUploadingTeam2Logo] = useState(false);
+  const [todayMatches, setTodayMatches] = useState<any[]>([]);
+  const [loadingMatches, setLoadingMatches] = useState(false);
+  const [showMatchDropdown, setShowMatchDropdown] = useState(false);
+  const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const [formData, setFormData] = useState({
     team1Name: '',
     team1Logo: '',
@@ -39,6 +45,54 @@ export default function CreatePredictionScreen() {
     predictionType: 'match-result',
     additionalInfo: ''
   });
+
+  useEffect(() => {
+    fetchTodayMatches();
+  }, []);
+
+  const fetchTodayMatches = async () => {
+    try {
+      setLoadingMatches(true);
+      const response = await matchesAPI.getTodayMatches();
+      if (response.success) {
+        setTodayMatches(response.data || []);
+      }
+    } catch (error: any) {
+      console.error('Failed to fetch today\'s matches:', error);
+      // Don't show error alert - just log it, as matches might not be available
+    } finally {
+      setLoadingMatches(false);
+    }
+  };
+
+  const handleSelectMatch = (match: any) => {
+    setSelectedMatch(match);
+    
+    // Combine matchDate and matchTime for the form
+    let matchDateTime = new Date().toISOString().slice(0, 16); // Default to now
+    if (match.matchDate) {
+      const matchDateObj = new Date(match.matchDate);
+      if (match.matchTime) {
+        // Parse matchTime (format: "HH:mm" or "HH:MM")
+        const [hours, minutes] = match.matchTime.split(':').map(Number);
+        if (!isNaN(hours) && !isNaN(minutes)) {
+          matchDateObj.setHours(hours, minutes, 0, 0);
+        }
+      }
+      matchDateTime = matchDateObj.toISOString().slice(0, 16);
+    }
+    
+    setFormData({
+      ...formData,
+      team1Name: match.homeTeam || '',
+      team1Logo: match.homeLogo || '',
+      team2Name: match.awayTeam || '',
+      team2Logo: match.awayLogo || '',
+      league: match.league || '',
+      matchDate: matchDateTime
+    });
+    setShowMatchDropdown(false);
+  };
 
   const pickTeamLogo = async (teamNumber: 1 | 2) => {
     try {
@@ -164,6 +218,74 @@ export default function CreatePredictionScreen() {
 
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         <View style={styles.formCard}>
+          {/* Match Selection Section */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>Select Today's Match</Text>
+            
+            <TouchableOpacity
+              style={styles.matchDropdownButton}
+              onPress={() => setShowMatchDropdown(true)}
+              disabled={loadingMatches}
+            >
+              {loadingMatches ? (
+                <ActivityIndicator size="small" color="#3B82F6" />
+              ) : selectedMatch ? (
+                <View style={styles.selectedMatchContainer}>
+                  <View style={styles.selectedMatchTeams}>
+                    {selectedMatch.homeLogo ? (
+                      <Image source={{ uri: selectedMatch.homeLogo }} style={styles.matchLogoSmall} />
+                    ) : (
+                      <View style={styles.matchLogoPlaceholderSmall}>
+                        <Text style={styles.matchLogoTextSmall}>{selectedMatch.homeTeam?.charAt(0) || ''}</Text>
+                      </View>
+                    )}
+                    <Text style={styles.selectedMatchText} numberOfLines={1}>
+                      {selectedMatch.homeTeam} vs {selectedMatch.awayTeam}
+                    </Text>
+                    {selectedMatch.awayLogo ? (
+                      <Image source={{ uri: selectedMatch.awayLogo }} style={styles.matchLogoSmall} />
+                    ) : (
+                      <View style={styles.matchLogoPlaceholderSmall}>
+                        <Text style={styles.matchLogoTextSmall}>{selectedMatch.awayTeam?.charAt(0) || ''}</Text>
+                      </View>
+                    )}
+                  </View>
+                  {selectedMatch.league && (
+                    <Text style={styles.selectedMatchLeague}>{selectedMatch.league}</Text>
+                  )}
+                </View>
+              ) : (
+                <View style={styles.matchDropdownPlaceholder}>
+                  <Ionicons name="football-outline" size={20} color="#9CA3AF" />
+                  <Text style={styles.matchDropdownPlaceholderText}>
+                    {todayMatches.length === 0 ? 'No matches today' : 'Select a match from today'}
+                  </Text>
+                </View>
+              )}
+              <Ionicons name="chevron-down" size={20} color="#9CA3AF" />
+            </TouchableOpacity>
+
+            {selectedMatch && (
+              <TouchableOpacity
+                style={styles.clearMatchButton}
+                onPress={() => {
+                  setSelectedMatch(null);
+                  setFormData({
+                    ...formData,
+                    team1Name: '',
+                    team1Logo: '',
+                    team2Name: '',
+                    team2Logo: '',
+                    league: ''
+                  });
+                }}
+              >
+                <Ionicons name="close-circle" size={16} color="#EF4444" />
+                <Text style={styles.clearMatchText}>Clear selection</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+
           {/* Teams Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Teams</Text>
@@ -176,6 +298,7 @@ export default function CreatePredictionScreen() {
                 onChangeText={(text) => setFormData({ ...formData, team1Name: text })}
                 placeholder="Enter team 1 name"
                 placeholderTextColor="#9CA3AF"
+                editable={!selectedMatch ? true : false}
               />
             </View>
 
@@ -193,9 +316,9 @@ export default function CreatePredictionScreen() {
                 </View>
               ) : null}
               <TouchableOpacity
-                style={styles.uploadLogoButton}
+                style={[styles.uploadLogoButton, selectedMatch && styles.uploadLogoButtonDisabled]}
                 onPress={() => pickTeamLogo(1)}
-                disabled={uploadingTeam1Logo}
+                disabled={uploadingTeam1Logo || !!selectedMatch}
               >
                 {uploadingTeam1Logo ? (
                   <ActivityIndicator size="small" color="#3B82F6" />
@@ -216,6 +339,7 @@ export default function CreatePredictionScreen() {
                 onChangeText={(text) => setFormData({ ...formData, team2Name: text })}
                 placeholder="Enter team 2 name"
                 placeholderTextColor="#9CA3AF"
+                editable={!selectedMatch ? true : false}
               />
             </View>
 
@@ -233,9 +357,9 @@ export default function CreatePredictionScreen() {
                 </View>
               ) : null}
               <TouchableOpacity
-                style={styles.uploadLogoButton}
+                style={[styles.uploadLogoButton, selectedMatch && styles.uploadLogoButtonDisabled]}
                 onPress={() => pickTeamLogo(2)}
-                disabled={uploadingTeam2Logo}
+                disabled={uploadingTeam2Logo || !!selectedMatch}
               >
                 {uploadingTeam2Logo ? (
                   <ActivityIndicator size="small" color="#3B82F6" />
@@ -289,15 +413,18 @@ export default function CreatePredictionScreen() {
             <View style={styles.inputGroup}>
               <Text style={styles.label}>Match Date & Time *</Text>
               <TextInput
-                style={styles.input}
+                style={[styles.input, selectedMatch && styles.inputDisabled]}
                 value={formData.matchDate}
                 onChangeText={(text) => setFormData({ ...formData, matchDate: text })}
                 placeholder="YYYY-MM-DDTHH:mm (e.g., 2024-12-25T15:00)"
                 placeholderTextColor="#9CA3AF"
+                editable={!selectedMatch ? true : false}
               />
-              <Text style={styles.helperText}>
-                Format: YYYY-MM-DDTHH:mm (e.g., 2024-12-25T15:00)
-              </Text>
+              {!selectedMatch && (
+                <Text style={styles.helperText}>
+                  Format: YYYY-MM-DDTHH:mm (e.g., 2024-12-25T15:00)
+                </Text>
+              )}
             </View>
 
             <View style={styles.inputGroup}>
@@ -374,6 +501,88 @@ export default function CreatePredictionScreen() {
           </TouchableOpacity>
         </View>
       </ScrollView>
+
+      {/* Match Dropdown Modal */}
+      <Modal
+        visible={showMatchDropdown}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowMatchDropdown(false)}
+      >
+        <TouchableOpacity
+          style={styles.modalOverlay}
+          activeOpacity={1}
+          onPress={() => setShowMatchDropdown(false)}
+        >
+          <View 
+            style={styles.modalContent} 
+            onStartShouldSetResponder={() => true}
+            onResponderTerminationRequest={() => false}
+          >
+            <View style={styles.modalHeader}>
+              <Text style={styles.modalTitle}>Select Today's Match</Text>
+              <TouchableOpacity onPress={() => setShowMatchDropdown(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+            
+            {loadingMatches ? (
+              <View style={styles.modalLoading}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.modalLoadingText}>Loading matches...</Text>
+              </View>
+            ) : todayMatches.length === 0 ? (
+              <View style={styles.modalEmpty}>
+                <Ionicons name="football-outline" size={64} color="#9CA3AF" />
+                <Text style={styles.modalEmptyText}>No matches scheduled for today</Text>
+                <Text style={styles.modalEmptySubtext}>Please enter match details manually</Text>
+              </View>
+            ) : (
+              <FlatList
+                data={todayMatches}
+                keyExtractor={(item) => item._id}
+                renderItem={({ item }) => (
+                  <TouchableOpacity
+                    style={styles.matchOption}
+                    onPress={() => handleSelectMatch(item)}
+                  >
+                    <View style={styles.matchOptionContent}>
+                      <View style={styles.matchOptionTeams}>
+                        {item.homeLogo ? (
+                          <Image source={{ uri: item.homeLogo }} style={styles.matchOptionLogo} />
+                        ) : (
+                          <View style={styles.matchOptionLogoPlaceholder}>
+                            <Text style={styles.matchOptionLogoText}>{item.homeTeam?.charAt(0) || ''}</Text>
+                          </View>
+                        )}
+                        <View style={styles.matchOptionInfo}>
+                          <Text style={styles.matchOptionTeamsText}>
+                            {item.homeTeam} vs {item.awayTeam}
+                          </Text>
+                          {item.league && (
+                            <Text style={styles.matchOptionLeague}>{item.league}</Text>
+                          )}
+                          {item.matchTime && (
+                            <Text style={styles.matchOptionTime}>{item.matchTime}</Text>
+                          )}
+                        </View>
+                        {item.awayLogo ? (
+                          <Image source={{ uri: item.awayLogo }} style={styles.matchOptionLogo} />
+                        ) : (
+                          <View style={styles.matchOptionLogoPlaceholder}>
+                            <Text style={styles.matchOptionLogoText}>{item.awayTeam?.charAt(0) || ''}</Text>
+                          </View>
+                        )}
+                      </View>
+                    </View>
+                  </TouchableOpacity>
+                )}
+                contentContainerStyle={styles.modalList}
+              />
+            )}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -536,5 +745,187 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.bodySemiBold,
     color: '#3B82F6',
+  },
+  uploadLogoButtonDisabled: {
+    opacity: 0.5,
+  },
+  inputDisabled: {
+    opacity: 0.7,
+    backgroundColor: '#2D3748',
+  },
+  matchDropdownButton: {
+    backgroundColor: '#1A202C',
+    borderRadius: 8,
+    padding: 15,
+    borderWidth: 1,
+    borderColor: '#4A5568',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  matchDropdownPlaceholder: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  matchDropdownPlaceholderText: {
+    fontSize: 15,
+    color: '#9CA3AF',
+    fontFamily: fonts.body,
+  },
+  selectedMatchContainer: {
+    flex: 1,
+  },
+  selectedMatchTeams: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 5,
+  },
+  selectedMatchText: {
+    flex: 1,
+    fontSize: 15,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+  },
+  selectedMatchLeague: {
+    fontSize: 13,
+    color: '#3B82F6',
+    marginTop: 4,
+  },
+  matchLogoSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+  },
+  matchLogoPlaceholderSmall: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchLogoTextSmall: {
+    fontSize: 12,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  clearMatchButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 6,
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+  },
+  clearMatchText: {
+    fontSize: 13,
+    color: '#EF4444',
+    fontFamily: fonts.body,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  modalContent: {
+    backgroundColor: '#1A202C',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '80%',
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+  },
+  modalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D3748',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  modalList: {
+    padding: 10,
+  },
+  modalLoading: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  modalLoadingText: {
+    marginTop: 10,
+    color: '#9CA3AF',
+    fontSize: 14,
+  },
+  modalEmpty: {
+    padding: 40,
+    alignItems: 'center',
+  },
+  modalEmptyText: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginTop: 15,
+  },
+  modalEmptySubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  matchOption: {
+    backgroundColor: '#2D3748',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+  },
+  matchOptionContent: {
+    width: '100%',
+  },
+  matchOptionTeams: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  matchOptionLogo: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+  },
+  matchOptionLogoPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  matchOptionLogoText: {
+    fontSize: 16,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  matchOptionInfo: {
+    flex: 1,
+  },
+  matchOptionTeamsText: {
+    fontSize: 15,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginBottom: 4,
+  },
+  matchOptionLeague: {
+    fontSize: 13,
+    color: '#3B82F6',
+    marginBottom: 2,
+  },
+  matchOptionTime: {
+    fontSize: 12,
+    color: '#9CA3AF',
   },
 });

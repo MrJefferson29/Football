@@ -183,6 +183,24 @@ export default function RegisterScreen() {
               </TouchableOpacity>
             </View>
 
+            <View style={styles.inputContainer}>
+              <Ionicons name="gift-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
+              <TextInput
+                style={styles.input}
+                placeholder="Referral Code (Optional)"
+                placeholderTextColor="#6B7280"
+                value={referralCode}
+                onChangeText={(text) => setReferralCode(text.toUpperCase().trim())}
+                autoCapitalize="characters"
+                autoCorrect={false}
+              />
+            </View>
+            {referralCode && (
+              <Text style={styles.referralHint}>
+                You and your referrer will each earn 50 points!
+              </Text>
+            )}
+
             <TouchableOpacity
               style={[styles.registerButton, loading && styles.registerButtonDisabled]}
               onPress={handleRegister}
@@ -297,6 +315,14 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     fontSize: 14,
     fontFamily: fonts.bodySemiBold,
+  },
+  referralHint: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#10B981',
+    marginTop: -8,
+    marginBottom: 8,
+    marginLeft: 4,
   },
 });
 

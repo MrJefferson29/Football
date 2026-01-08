@@ -97,7 +97,7 @@ export default function PollResultsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Poll Results</Text>
+          <Text style={styles.headerTitle}>Gamefy</Text>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -115,7 +115,7 @@ export default function PollResultsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Poll Results</Text>
+          <Text style={styles.headerTitle}>Gamefy</Text>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
@@ -132,7 +132,7 @@ export default function PollResultsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Poll Results</Text>
+          <Text style={styles.headerTitle}>Gamefy</Text>
           <TouchableOpacity 
             onPress={handleShare} 
             disabled={isCapturing || loading}
@@ -351,7 +351,7 @@ const styles = StyleSheet.create({
     padding: 5,
   },
   headerTitle: {
-    fontSize: 18,
+    fontSize: 26,
     fontFamily: fonts.heading,
     color: '#FFFFFF',
   },

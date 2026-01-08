@@ -200,14 +200,14 @@ export default function MatchesScreen() {
             <Text style={styles.sectionTitle}>
               {selectedLeague ? (leagueConfig[selectedLeague]?.fullName || selectedLeague) : 'All'} - Fixtures & Results
             </Text>
-            <TouchableOpacity 
+            {/* <TouchableOpacity 
               style={styles.oddsToggle}
               onPress={() => setShowOdds(!showOdds)}
             >
               <Text style={styles.oddsToggleText}>
                 {showOdds ? 'Hide Odds' : 'Show Odds'}
               </Text>
-            </TouchableOpacity>
+            </TouchableOpacity> */}
           </View>
           {loading ? (
             <View style={styles.loadingContainer}>

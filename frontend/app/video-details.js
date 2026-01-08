@@ -138,9 +138,17 @@ export default function VideoDetail() {
     setNewComment('');
 
     try {
-      await highlightsAPI.addComment(highlight._id, commentText);
-      // Refresh to get updated comments with proper IDs
-      await fetchHighlight();
+      const response = await highlightsAPI.addComment(highlight._id, commentText);
+      if (response.success && response.data) {
+        // Update the temp comment with the real one from server
+        setHighlight(prev => {
+          if (!prev) return prev;
+          const updatedComments = prev.comments.map(c => 
+            c._id === tempComment._id ? response.data : c
+          );
+          return { ...prev, comments: updatedComments };
+        });
+      }
     } catch (error) {
       // Revert optimistic update on error
       setHighlight(prev =>
@@ -155,31 +163,156 @@ export default function VideoDetail() {
   const handleSendReply = async () => {
     if (!replyText.trim() || !replyingTo || !highlight || !user) return;
 
+    const tempReply = {
+      _id: Date.now().toString(),
+      userId: {
+        _id: user._id,
+        username: user.username,
+        avatar: user.avatar,
+      },
+      message: replyText,
+      likes: 0,
+      createdAt: new Date().toISOString(),
+    };
+
+    // Optimistic update
+    setHighlight(prev => {
+      if (!prev) return prev;
+      const updatedComments = prev.comments.map(comment => {
+        if (comment._id === replyingTo) {
+          return {
+            ...comment,
+            replies: [...(comment.replies || []), tempReply]
+          };
+        }
+        return comment;
+      });
+      return { ...prev, comments: updatedComments };
+    });
+
+    const replyTextToSend = replyText;
+    setReplyText('');
+    setReplyingTo(null);
+
     try {
-      const response = await highlightsAPI.replyToComment(highlight._id, replyingTo, replyText);
-      if (response.success) {
-        setReplyText('');
-        setReplyingTo(null);
-        await fetchHighlight(); // Refresh to get updated comments
+      const response = await highlightsAPI.replyToComment(highlight._id, replyingTo, replyTextToSend);
+      if (response.success && response.data) {
+        // Update the temp reply with the real one from server
+        setHighlight(prev => {
+          if (!prev) return prev;
+          const updatedComments = prev.comments.map(comment => {
+            if (comment._id === replyingTo) {
+              const updatedReplies = comment.replies.map(r => 
+                r._id === tempReply._id ? response.data : r
+              );
+              return { ...comment, replies: updatedReplies };
+            }
+            return comment;
+          });
+          return { ...prev, comments: updatedComments };
+        });
       } else {
         Alert.alert('Error', response.message || 'Failed to send reply');
+        // Revert optimistic update
+        setHighlight(prev => {
+          if (!prev) return prev;
+          const updatedComments = prev.comments.map(comment => {
+            if (comment._id === replyingTo) {
+              return {
+                ...comment,
+                replies: comment.replies.filter(r => r._id !== tempReply._id)
+              };
+            }
+            return comment;
+          });
+          return { ...prev, comments: updatedComments };
+        });
       }
     } catch (error) {
       console.error('Error sending reply:', error);
       Alert.alert('Error', error.message || 'Failed to send reply');
+      // Revert optimistic update
+      setHighlight(prev => {
+        if (!prev) return prev;
+        const updatedComments = prev.comments.map(comment => {
+          if (comment._id === replyingTo) {
+            return {
+              ...comment,
+              replies: comment.replies.filter(r => r._id !== tempReply._id)
+            };
+          }
+          return comment;
+        });
+        return { ...prev, comments: updatedComments };
+      });
     }
   };
 
   const handleLikeComment = async (commentId) => {
     if (!highlight) return;
 
+    // Find the comment to update
+    const comment = highlight.comments.find(c => c._id === commentId);
+    if (!comment) return;
+
+    const wasLiked = comment.likedBy?.some(id => 
+      (typeof id === 'string' ? id : id._id || id) === user?._id
+    ) || false;
+    const newLikes = wasLiked ? (comment.likes || 0) - 1 : (comment.likes || 0) + 1;
+
+    // Optimistic update
+    setHighlight(prev => {
+      if (!prev) return prev;
+      const updatedComments = prev.comments.map(c => {
+        if (c._id === commentId) {
+          return {
+            ...c,
+            likes: newLikes,
+            likedBy: wasLiked 
+              ? (c.likedBy || []).filter(id => {
+                  const idValue = typeof id === 'string' ? id : id._id || id;
+                  return idValue !== user?._id;
+                })
+              : [...(c.likedBy || []), user?._id]
+          };
+        }
+        return c;
+      });
+      return { ...prev, comments: updatedComments };
+    });
+
     try {
       const response = await highlightsAPI.likeComment(highlight._id, commentId);
-      if (response.success) {
-        await fetchHighlight(); // Refresh to get updated likes
+      if (response.success && response.data) {
+        // Update with server response to ensure consistency
+        setHighlight(prev => {
+          if (!prev) return prev;
+          const updatedComments = prev.comments.map(c => {
+            if (c._id === commentId) {
+              return response.data;
+            }
+            return c;
+          });
+          return { ...prev, comments: updatedComments };
+        });
       }
     } catch (error) {
       console.error('Error liking comment:', error);
+      // Revert optimistic update on error
+      setHighlight(prev => {
+        if (!prev) return prev;
+        const updatedComments = prev.comments.map(c => {
+          if (c._id === commentId) {
+            return {
+              ...c,
+              likes: comment.likes,
+              likedBy: comment.likedBy
+            };
+          }
+          return c;
+        });
+        return { ...prev, comments: updatedComments };
+      });
     }
   };
 

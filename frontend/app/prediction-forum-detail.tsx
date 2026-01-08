@@ -1,11 +1,10 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   ActivityIndicator,
   Alert,
   Image,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
@@ -13,7 +12,9 @@ import {
   View,
   FlatList,
   KeyboardAvoidingView,
-  Platform
+  Platform,
+  Modal,
+  ScrollView
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
@@ -34,6 +35,9 @@ export default function PredictionForumDetailScreen() {
   const [messageImage, setMessageImage] = useState<string | null>(null);
   const [sendingMessage, setSendingMessage] = useState(false);
   const [uploadingImage, setUploadingImage] = useState(false);
+  const flatListRef = useRef<FlatList>(null);
+  const [mergedItems, setMergedItems] = useState<any[]>([]);
+  const [showForumInfo, setShowForumInfo] = useState(false);
 
   useEffect(() => {
     if (id) {
@@ -42,6 +46,41 @@ export default function PredictionForumDetailScreen() {
       fetchMessages();
     }
   }, [id]);
+
+  // Merge and sort predictions and messages by date
+  useEffect(() => {
+    const items: any[] = [];
+    
+    // Add predictions with type marker
+    predictions.forEach(pred => {
+      items.push({
+        ...pred,
+        itemType: 'prediction',
+        sortDate: new Date(pred.createdAt || pred.updatedAt)
+      });
+    });
+    
+    // Add messages with type marker
+    messages.forEach(msg => {
+      items.push({
+        ...msg,
+        itemType: 'message',
+        sortDate: new Date(msg.createdAt)
+      });
+    });
+    
+    // Sort by date (oldest first, newest last)
+    items.sort((a, b) => a.sortDate.getTime() - b.sortDate.getTime());
+    
+    setMergedItems(items);
+    
+    // Scroll to bottom after a short delay to ensure content is rendered
+    if (items.length > 0) {
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: false });
+      }, 100);
+    }
+  }, [predictions, messages]);
 
   const fetchForum = async () => {
     try {
@@ -157,7 +196,11 @@ export default function PredictionForumDetailScreen() {
       if (response.success) {
         setNewMessage('');
         setMessageImage(null);
-        fetchMessages();
+        await fetchMessages();
+        // Scroll to bottom after sending
+        setTimeout(() => {
+          flatListRef.current?.scrollToEnd({ animated: true });
+        }, 100);
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to send message');
@@ -171,107 +214,144 @@ export default function PredictionForumDetailScreen() {
     (typeof m === 'string' ? m : m._id) === user._id
   );
 
-  const renderPrediction = ({ item }: { item: any }) => {
-    const isPending = item.status === 'pending';
-    const isCompleted = item.status === 'completed';
-    const isCorrect = item.isCorrect === true;
+  const getTimeAgo = (dateString: string) => {
+    const date = new Date(dateString);
+    const now = new Date();
+    const diffInSeconds = Math.floor((now.getTime() - date.getTime()) / 1000);
 
-    return (
-      <TouchableOpacity
-        style={styles.predictionCard}
-        onPress={() => router.push({
-          pathname: '/prediction-detail',
-          params: { id: item._id }
-        })}
-      >
-        <View style={styles.predictionHeader}>
-          <View style={styles.teamsContainer}>
-            <View style={styles.team}>
-              {item.team1.logo ? (
-                <Image source={{ uri: item.team1.logo }} style={styles.teamLogo} />
-              ) : (
-                <View style={styles.teamLogoPlaceholder}>
-                  <Text style={styles.teamLogoText}>{item.team1.name.charAt(0)}</Text>
-                </View>
-              )}
-              <Text style={styles.teamName} numberOfLines={1}>{item.team1.name}</Text>
-            </View>
-            <View style={styles.vsContainer}>
-              <Text style={styles.vsText}>VS</Text>
-            </View>
-            <View style={styles.team}>
-              {item.team2.logo ? (
-                <Image source={{ uri: item.team2.logo }} style={styles.teamLogo} />
-              ) : (
-                <View style={styles.teamLogoPlaceholder}>
-                  <Text style={styles.teamLogoText}>{item.team2.name.charAt(0)}</Text>
-                </View>
-              )}
-              <Text style={styles.teamName} numberOfLines={1}>{item.team2.name}</Text>
-            </View>
-          </View>
-        </View>
+    if (diffInSeconds < 60) {
+      return `${diffInSeconds}s ago`;
+    } else if (diffInSeconds < 3600) {
+      const minutes = Math.floor(diffInSeconds / 60);
+      return `${minutes}m ago`;
+    } else if (diffInSeconds < 86400) {
+      const hours = Math.floor(diffInSeconds / 3600);
+      return `${hours}h ago`;
+    } else {
+      const days = Math.floor(diffInSeconds / 86400);
+      return `${days}d ago`;
+    }
+  };
 
-        <View style={styles.scoreContainer}>
-          <View style={styles.scoreItem}>
-            <Text style={styles.scoreLabel}>Predicted</Text>
-            <Text style={styles.scoreValue}>
-              {item.predictedScore.team1} - {item.predictedScore.team2}
-            </Text>
-          </View>
-          {isCompleted && item.actualScore && (
-            <View style={styles.scoreItem}>
-              <Text style={styles.scoreLabel}>Actual</Text>
-              <Text style={[
-                styles.scoreValue,
-                isCorrect && styles.correctScore,
-                !isCorrect && styles.incorrectScore
-              ]}>
-                {item.actualScore.team1} - {item.actualScore.team2}
+  const renderChatItem = ({ item }: { item: any }) => {
+    if (item.itemType === 'prediction') {
+      const isPending = item.status === 'pending';
+      const isCompleted = item.status === 'completed';
+      const isCorrect = item.isCorrect === true;
+
+      return (
+        <TouchableOpacity
+          style={styles.chatBubble}
+          onPress={() => router.push({
+            pathname: '/prediction-detail',
+            params: { id: item._id }
+          })}
+        >
+          <View style={styles.bubbleContents}>
+            <View style={styles.predictionBubbleHeader}>
+              <Text style={styles.bubbleSenderName}>
+                {item.headUserId?.username || 'Forum Head'}
               </Text>
+              <Text style={styles.bubbleTime}>{getTimeAgo(item.createdAt || item.updatedAt)}</Text>
             </View>
-          )}
-        </View>
-
-        {item.league && (
-          <Text style={styles.leagueText}>{item.league}</Text>
-        )}
-
-        <View style={styles.predictionFooter}>
-          <View style={styles.statusBadge}>
-            <Text style={[
-              styles.statusText,
-              isPending && styles.pendingStatus,
-              isCompleted && isCorrect && styles.correctStatus,
-              isCompleted && !isCorrect && styles.incorrectStatus
-            ]}>
-              {isPending ? 'Pending' : isCorrect ? 'Correct ✓' : 'Incorrect ✗'}
-            </Text>
+            
+            <View style={styles.predictionBubbleBody}>
+              <View style={styles.predictionTeamsRow}>
+                <View style={styles.predictionTeamSmall}>
+                  {item.team1.logo ? (
+                    <Image source={{ uri: item.team1.logo }} style={styles.smallTeamLogo} />
+                  ) : (
+                    <View style={styles.smallTeamLogoPlaceholder}>
+                      <Text style={styles.smallTeamLogoText}>{item.team1.name.charAt(0)}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.smallTeamName} numberOfLines={1}>{item.team1.name}</Text>
+                </View>
+                <Text style={styles.predictionVs}>VS</Text>
+                <View style={styles.predictionTeamSmall}>
+                  {item.team2.logo ? (
+                    <Image source={{ uri: item.team2.logo }} style={styles.smallTeamLogo} />
+                  ) : (
+                    <View style={styles.smallTeamLogoPlaceholder}>
+                      <Text style={styles.smallTeamLogoText}>{item.team2.name.charAt(0)}</Text>
+                    </View>
+                  )}
+                  <Text style={styles.smallTeamName} numberOfLines={1}>{item.team2.name}</Text>
+                </View>
+              </View>
+              
+              <View style={styles.predictionScoreRow}>
+                <Text style={styles.predictionScore}>
+                  {item.predictedScore.team1} - {item.predictedScore.team2}
+                </Text>
+                {isCompleted && item.actualScore && (
+                  <Text style={[
+                    styles.actualScore,
+                    isCorrect && styles.correctScore,
+                    !isCorrect && styles.incorrectScore
+                  ]}>
+                    (Actual: {item.actualScore.team1} - {item.actualScore.team2})
+                  </Text>
+                )}
+              </View>
+              
+              {item.league && (
+                <Text style={styles.predictionLeague}>{item.league}</Text>
+              )}
+              
+              <View style={styles.predictionBubbleFooter}>
+                <View style={[
+                  styles.predictionStatusBadge,
+                  isPending && styles.pendingBadge,
+                  isCompleted && isCorrect && styles.correctBadge,
+                  isCompleted && !isCorrect && styles.incorrectBadge
+                ]}>
+                  <Text style={[
+                    styles.predictionStatusText,
+                    isPending && styles.pendingText,
+                    isCompleted && isCorrect && styles.correctText,
+                    isCompleted && !isCorrect && styles.incorrectText
+                  ]}>
+                    {isPending ? 'Pending' : isCorrect ? 'Correct ✓' : 'Incorrect ✗'}
+                  </Text>
+                </View>
+              </View>
+            </View>
           </View>
-          <View style={styles.predictionStats}>
-            <Ionicons name="heart-outline" size={14} color="#9CA3AF" />
-            <Text style={styles.likeCount}>{item.likes || 0}</Text>
-            {item.comments && item.comments.length > 0 && (
-              <>
-                <Ionicons name="chatbubble-outline" size={14} color="#9CA3AF" style={{ marginLeft: 12 }} />
-                <Text style={styles.commentCount}>{item.comments.length}</Text>
-              </>
+        </TouchableOpacity>
+      );
+    } else {
+      // Message item
+      return (
+        <View style={styles.chatBubble}>
+          <View style={styles.bubbleContent}>
+            <View style={styles.bubbleHeader}>
+              <Text style={styles.bubbleSenderName}>
+                {item.headUserId?.username || 'Forum Head'}
+              </Text>
+              <Text style={styles.bubbleTime}>{getTimeAgo(item.createdAt)}</Text>
+            </View>
+            {item.image && (
+              <Image source={{ uri: item.image }} style={styles.messageBubbleImage} />
+            )}
+            {item.message && (
+              <Text style={styles.messageBubbleText}>{item.message}</Text>
             )}
           </View>
         </View>
-      </TouchableOpacity>
-    );
+      );
+    }
   };
 
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <View style={styles.whatsappHeader}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Forum Details</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
@@ -284,12 +364,12 @@ export default function PredictionForumDetailScreen() {
   if (!forum) {
     return (
       <SafeAreaView style={styles.container}>
-        <View style={styles.header}>
-          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+        <View style={styles.whatsappHeader}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Forum Details</Text>
-          <View style={styles.placeholder} />
+          <View style={{ width: 40 }} />
         </View>
         <View style={styles.emptyContainer}>
           <Ionicons name="alert-circle-outline" size={64} color="#9CA3AF" />
@@ -300,170 +380,114 @@ export default function PredictionForumDetailScreen() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+    <SafeAreaView style={styles.container} edges={['top']}>
+      {/* WhatsApp-style Header */}
+      <View style={styles.whatsappHeader}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.headerBackButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle} numberOfLines={1}>{forum.name}</Text>
-        <View style={styles.placeholder} />
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Forum Info */}
-        <View style={styles.forumInfoCard}>
+        
+        <TouchableOpacity 
+          style={styles.headerAvatarContainer}
+          onPress={() => setShowForumInfo(true)}
+          activeOpacity={0.7}
+        >
           {forum.profilePicture ? (
-            <Image source={{ uri: forum.profilePicture }} style={styles.forumImage} />
+            <Image source={{ uri: forum.profilePicture }} style={styles.headerAvatar} />
           ) : (
-            <View style={styles.forumImagePlaceholder}>
-              <Ionicons name="trophy" size={40} color="#3B82F6" />
+            <View style={styles.headerAvatarPlaceholder}>
+              <Ionicons name="trophy" size={20} color="#3B82F6" />
             </View>
           )}
-          <Text style={styles.forumName}>{forum.name}</Text>
-          {forum.description && (
-            <Text style={styles.forumDescription}>{forum.description}</Text>
-          )}
-          <View style={styles.forumStats}>
-            <View style={styles.statItem}>
-              <Ionicons name="people" size={16} color="#3B82F6" />
-              <Text style={styles.statText}>{forum.memberCount || 0} members</Text>
-            </View>
-            {forum.headUserId && (
-              <View style={styles.statItem}>
-                <Ionicons name="person" size={16} color="#3B82F6" />
-                <Text style={styles.statText}>Head: {forum.headUserId.username}</Text>
-              </View>
-            )}
-          </View>
+        </TouchableOpacity>
+        
+        <TouchableOpacity 
+          style={styles.headerInfo}
+          onPress={() => setShowForumInfo(true)}
+          activeOpacity={0.7}
+        >
+          <Text style={styles.headerTitle} numberOfLines={1}>{forum.name}</Text>
+          <Text style={styles.headerSubtitle}>
+            {forum.memberCount || 0} members
+          </Text>
+        </TouchableOpacity>
 
+        <View style={styles.headerActions}>
           {isHead && (
-            <TouchableOpacity
-              style={styles.manageButton}
-              onPress={() => router.push({
-                pathname: '/manage-forum',
-                params: { id: forum._id }
-              })}
-            >
-              <Ionicons name="settings" size={20} color="#FFFFFF" />
-              <Text style={styles.manageButtonText}>Manage Forum</Text>
-            </TouchableOpacity>
+            <>
+              <TouchableOpacity
+                style={styles.headerActionButton}
+                onPress={() => router.push({
+                  pathname: '/create-prediction',
+                  params: { forumId: forum._id }
+                })}
+              >
+                <Ionicons name="add-circle" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerActionButton}
+                onPress={() => router.push({
+                  pathname: '/manage-forum',
+                  params: { id: forum._id }
+                })}
+              >
+                <Ionicons name="ellipsis-vertical" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </>
           )}
-
           {!isHead && !isMember && (
             <TouchableOpacity
-              style={styles.joinButton}
+              style={styles.headerActionButton}
               onPress={handleJoinForum}
             >
-              <Text style={styles.joinButtonText}>Join Forum</Text>
-            </TouchableOpacity>
-          )}
-
-          {isHead && (
-            <TouchableOpacity
-              style={styles.createPredictionButton}
-              onPress={() => router.push({
-                pathname: '/create-prediction',
-                params: { forumId: forum._id }
-              })}
-            >
-              <Ionicons name="add-circle" size={20} color="#FFFFFF" />
-              <Text style={styles.createPredictionButtonText}>Create Prediction</Text>
+              <Ionicons name="person-add" size={24} color="#FFFFFF" />
             </TouchableOpacity>
           )}
         </View>
+      </View>
 
-        {/* Predictions Section */}
-        <View style={styles.predictionsSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Predictions</Text>
-            {predictionsLoading && (
-              <ActivityIndicator size="small" color="#3B82F6" />
+      <KeyboardAvoidingView
+        style={styles.keyboardAvoidingView}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+      >
+        {/* Chat Messages & Predictions */}
+        {mergedItems.length === 0 && !predictionsLoading && !messagesLoading ? (
+          <View style={styles.emptyChat}>
+            <Ionicons name="chatbubbles-outline" size={64} color="#9CA3AF" />
+            <Text style={styles.emptyChatText}>No messages or predictions yet</Text>
+            {isHead && (
+              <Text style={styles.emptyChatSubtext}>
+                Start the conversation or create a prediction!
+              </Text>
             )}
           </View>
+        ) : (
+          <FlatList
+            ref={flatListRef}
+            data={mergedItems}
+            renderItem={renderChatItem}
+            keyExtractor={(item, index) => `${item.itemType}-${item._id}-${index}`}
+            contentContainerStyle={styles.chatList}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            onContentSizeChange={() => {
+              if (mergedItems.length > 0) {
+                flatListRef.current?.scrollToEnd({ animated: false });
+              }
+            }}
+          />
+        )}
 
-          {predictions.length === 0 ? (
-            <View style={styles.emptyPredictions}>
-              <Ionicons name="football-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyPredictionsText}>No predictions yet</Text>
-              {isHead && (
-                <Text style={styles.emptyPredictionsSubtext}>
-                  Create your first prediction to get started!
-                </Text>
-              )}
-            </View>
-          ) : (
-            <FlatList
-              data={predictions}
-              renderItem={renderPrediction}
-              keyExtractor={(item) => item._id}
-              scrollEnabled={false}
-              contentContainerStyle={styles.predictionsList}
-            />
-          )}
-        </View>
-
-        {/* Forum Messages Section */}
-        <View style={styles.messagesSection}>
-          <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Forum Messages</Text>
-            {messagesLoading && (
-              <ActivityIndicator size="small" color="#3B82F6" />
-            )}
+        {/* Loading indicator */}
+        {(predictionsLoading || messagesLoading) && (
+          <View style={styles.loadingOverlay}>
+            <ActivityIndicator size="small" color="#3B82F6" />
           </View>
+        )}
 
-          {messages.length === 0 ? (
-            <View style={styles.emptyMessages}>
-              <Ionicons name="chatbubbles-outline" size={48} color="#9CA3AF" />
-              <Text style={styles.emptyMessagesText}>No messages yet</Text>
-              {isHead && (
-                <Text style={styles.emptyMessagesSubtext}>
-                  Send a message to your forum members!
-                </Text>
-              )}
-            </View>
-          ) : (
-            <View style={styles.messagesList}>
-              {messages.map((message) => (
-                <View key={message._id} style={styles.messageCard}>
-                  <View style={styles.messageHeader}>
-                    {message.headUserId?.avatar ? (
-                      <Image 
-                        source={{ uri: message.headUserId.avatar }} 
-                        style={styles.messageAvatar} 
-                      />
-                    ) : (
-                      <View style={styles.messageAvatarPlaceholder}>
-                        <Ionicons name="person" size={16} color="#3B82F6" />
-                      </View>
-                    )}
-                    <View style={styles.messageHeaderInfo}>
-                      <Text style={styles.messageAuthor}>
-                        {message.headUserId?.username || 'Forum Head'}
-                      </Text>
-                      <Text style={styles.messageTime}>
-                        {new Date(message.createdAt).toLocaleDateString()} {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-                      </Text>
-                    </View>
-                  </View>
-                  {message.image && (
-                    <Image source={{ uri: message.image }} style={styles.messageImage} />
-                  )}
-                  {message.message && (
-                    <Text style={styles.messageText}>{message.message}</Text>
-                  )}
-                </View>
-              ))}
-            </View>
-          )}
-        </View>
-      </ScrollView>
-
-      {/* Message Form (Forum Head Only) */}
-      {isHead && (
-        <KeyboardAvoidingView
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
-        >
+        {/* Message Form (Forum Head Only) */}
+        {isHead && (
           <View style={styles.messageFormContainer}>
             {messageImage && (
               <View style={styles.messageImagePreview}>
@@ -492,7 +516,7 @@ export default function PredictionForumDetailScreen() {
                 style={styles.messageInput}
                 value={newMessage}
                 onChangeText={setNewMessage}
-                placeholder="Send a message to your forum..."
+                placeholder="Type a message..."
                 placeholderTextColor="#9CA3AF"
                 multiline
                 maxLength={1000}
@@ -510,8 +534,74 @@ export default function PredictionForumDetailScreen() {
               </TouchableOpacity>
             </View>
           </View>
-        </KeyboardAvoidingView>
-      )}
+        )}
+      </KeyboardAvoidingView>
+
+      {/* Forum Info Modal */}
+      <Modal
+        visible={showForumInfo}
+        animationType="slide"
+        transparent={true}
+        onRequestClose={() => setShowForumInfo(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.forumInfoModal}>
+            <View style={styles.forumInfoModalHeader}>
+              <Text style={styles.forumInfoModalTitle}>Forum Information</Text>
+              <TouchableOpacity onPress={() => setShowForumInfo(false)}>
+                <Ionicons name="close" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
+
+            <ScrollView style={styles.forumInfoModalContent} showsVerticalScrollIndicator={false}>
+              <View style={styles.forumInfoImageContainer}>
+                {forum.profilePicture ? (
+                  <Image source={{ uri: forum.profilePicture }} style={styles.forumInfoImage} />
+                ) : (
+                  <View style={styles.forumInfoImagePlaceholder}>
+                    <Ionicons name="trophy" size={60} color="#3B82F6" />
+                  </View>
+                )}
+              </View>
+
+              <Text style={styles.forumInfoName}>{forum.name}</Text>
+
+              {forum.description && (
+                <View style={styles.forumInfoDescriptionContainer}>
+                  <Text style={styles.forumInfoDescriptionLabel}>Description</Text>
+                  <Text style={styles.forumInfoDescription}>{forum.description}</Text>
+                </View>
+              )}
+
+              <View style={styles.forumInfoStats}>
+                <View style={styles.forumInfoStatItem}>
+                  <Ionicons name="people" size={24} color="#00A884" />
+                  <Text style={styles.forumInfoStatValue}>{forum.memberCount || 0}</Text>
+                  <Text style={styles.forumInfoStatLabel}>Members</Text>
+                </View>
+                {forum.headUserId && (
+                  <View style={styles.forumInfoStatItem}>
+                    <Ionicons name="person" size={24} color="#3B82F6" />
+                    <Text style={styles.forumInfoStatValue} numberOfLines={1}>
+                      {forum.headUserId.username || 'Forum Head'}
+                    </Text>
+                    <Text style={styles.forumInfoStatLabel}>Head</Text>
+                  </View>
+                )}
+              </View>
+
+              {forum.createdAt && (
+                <View style={styles.forumInfoMeta}>
+                  <Ionicons name="calendar-outline" size={16} color="#8696A0" />
+                  <Text style={styles.forumInfoMetaText}>
+                    Created {new Date(forum.createdAt).toLocaleDateString()}
+                  </Text>
+                </View>
+              )}
+            </ScrollView>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -519,30 +609,64 @@ export default function PredictionForumDetailScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A202C',
+    backgroundColor: '#0B141A',
   },
-  header: {
+  keyboardAvoidingView: {
+    flex: 1,
+  },
+  whatsappHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
+    backgroundColor: '#202C33',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#2D3748',
+    borderBottomColor: '#2A3942',
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
   },
-  backButton: {
-    padding: 5,
+  headerBackButton: {
+    padding: 8,
+    marginRight: 8,
+  },
+  headerAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 12,
+  },
+  headerAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 12,
+  },
+  headerInfo: {
+    flex: 1,
   },
   headerTitle: {
-    fontSize: 18,
-    fontFamily: fonts.heading,
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
-    flex: 1,
-    marginHorizontal: 10,
-    textAlign: 'center',
+    marginBottom: 2,
   },
-  placeholder: {
-    width: 34,
+  headerSubtitle: {
+    fontSize: 13,
+    color: '#8696A0',
+  },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  headerActionButton: {
+    padding: 8,
   },
   loadingContainer: {
     flex: 1,
@@ -554,6 +678,12 @@ const styles = StyleSheet.create({
     marginTop: 10,
     color: '#9CA3AF',
     fontSize: 16,
+  },
+  loadingOverlay: {
+    position: 'absolute',
+    top: 60,
+    right: 16,
+    zIndex: 10,
   },
   emptyContainer: {
     flex: 1,
@@ -567,350 +697,194 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     marginTop: 15,
   },
-  content: {
+  emptyChat: {
     flex: 1,
-    paddingHorizontal: 20,
-  },
-  forumInfoCard: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 20,
-    marginTop: 20,
-    alignItems: 'center',
-  },
-  forumImage: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    marginBottom: 15,
-  },
-  forumImagePlaceholder: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
-    backgroundColor: '#374151',
-    alignItems: 'center',
     justifyContent: 'center',
-    marginBottom: 15,
+    alignItems: 'center',
+    paddingVertical: 50,
   },
-  forumName: {
-    fontSize: 24,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
-    marginBottom: 10,
-    textAlign: 'center',
+  emptyChatText: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#8696A0',
+    marginTop: 15,
   },
-  forumDescription: {
+  emptyChatSubtext: {
     fontSize: 14,
-    color: '#9CA3AF',
+    color: '#8696A0',
+    marginTop: 5,
     textAlign: 'center',
-    marginBottom: 15,
+  },
+  chatList: {
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    paddingBottom: 20,
+  },
+  chatBubble: {
+    marginBottom: 12,
+  },
+  bubbleContents: {
+     backgroundColor: '#202C33',
+    borderRadius: 8,
+    padding: 12,
+    // alignSelf: 'flex-start',
+  },
+  bubbleContent: {
+    backgroundColor: '#202C33',
+    borderRadius: 8,
+    padding: 12,
+    maxWidth: '92%',
+    alignSelf: 'flex-start',
+  },
+  bubbleHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 6,
+  },
+  bubbleSenderName: {
+    fontSize: 14,
+    fontFamily: fonts.bodySemiBold,
+    color: '#00A884',
+    marginRight: 8,
+  },
+  bubbleTime: {
+    fontSize: 11,
+    color: '#8696A0',
+  },
+  messageBubbleText: {
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: '#E9EDEF',
     lineHeight: 20,
   },
-  forumStats: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-    gap: 15,
-    marginBottom: 20,
+  messageBubbleImage: {
+    width: '100%',
+    maxHeight: 250,
+    borderRadius: 6,
+    marginBottom: 8,
+    backgroundColor: '#374151',
   },
-  statItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-  },
-  statText: {
-    fontSize: 14,
-    color: '#9CA3AF',
-  },
-  manageButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    gap: 8,
-    marginBottom: 10,
-  },
-  manageButtonText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-  },
-  joinButton: {
-    backgroundColor: '#3B82F6',
-    paddingVertical: 12,
-    paddingHorizontal: 30,
-    borderRadius: 8,
-    marginBottom: 10,
-  },
-  joinButtonText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  createPredictionButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#10B981',
-    paddingVertical: 12,
-    paddingHorizontal: 20,
-    borderRadius: 8,
-    gap: 8,
-  },
-  createPredictionButtonText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-  },
-  predictionsSection: {
-    marginTop: 30,
-    marginBottom: 20,
-  },
-  sectionHeader: {
+  // Prediction bubble styles
+  predictionBubbleHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 15,
+    marginBottom: 10,
   },
-  sectionTitle: {
-    fontSize: 20,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
+  predictionBubbleBody: {
+    gap: 8,
   },
-  predictionsList: {
-    gap: 15,
-  },
-  predictionCard: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 15,
-  },
-  predictionHeader: {
-    marginBottom: 15,
-  },
-  teamsContainer: {
+  predictionTeamsRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
+    marginBottom: 8,
   },
-  team: {
+  predictionTeamSmall: {
     flex: 1,
-    alignItems: 'center',
-  },
-  teamLogo: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginBottom: 8,
-  },
-  teamLogoPlaceholder: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 8,
-  },
-  teamLogoText: {
-    fontSize: 20,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
-  },
-  teamName: {
-    fontSize: 14,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  vsContainer: {
-    paddingHorizontal: 15,
-  },
-  vsText: {
-    fontSize: 12,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-  },
-  scoreContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    marginBottom: 10,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderBottomWidth: 1,
-    borderColor: '#4A5568',
-  },
-  scoreItem: {
-    alignItems: 'center',
-  },
-  scoreLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 5,
-  },
-  scoreValue: {
-    fontSize: 20,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
-  },
-  correctScore: {
-    color: '#10B981',
-  },
-  incorrectScore: {
-    color: '#EF4444',
-  },
-  leagueText: {
-    fontSize: 12,
-    color: '#3B82F6',
-    marginBottom: 10,
-    textAlign: 'center',
-  },
-  predictionFooter: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginTop: 10,
-  },
-  statusBadge: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 12,
-    backgroundColor: '#374151',
-  },
-  statusText: {
-    fontSize: 12,
-    fontFamily: fonts.bodySemiBold,
-  },
-  pendingStatus: {
-    color: '#F59E0B',
-  },
-  correctStatus: {
-    color: '#10B981',
-  },
-  incorrectStatus: {
-    color: '#EF4444',
-  },
-  predictionStats: {
-    flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
   },
-  likeCount: {
-    fontSize: 12,
-    color: '#9CA3AF',
+  smallTeamLogo: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
   },
-  commentCount: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginLeft: 4,
-  },
-  emptyPredictions: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyPredictionsText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginTop: 15,
-  },
-  emptyPredictionsSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 5,
-    textAlign: 'center',
-  },
-  messagesSection: {
-    marginTop: 30,
-    marginBottom: 20,
-  },
-  messagesList: {
-    gap: 15,
-  },
-  messageCard: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-  },
-  messageHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  messageAvatar: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginRight: 10,
-  },
-  messageAvatarPlaceholder: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+  smallTeamLogoPlaceholder: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
     backgroundColor: '#374151',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 10,
   },
-  messageHeaderInfo: {
-    flex: 1,
-  },
-  messageAuthor: {
+  smallTeamLogoText: {
     fontSize: 14,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  smallTeamName: {
+    fontSize: 11,
     fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  messageTime: {
-    fontSize: 12,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-  },
-  messageImage: {
-    width: '100%',
-    height: 200,
-    borderRadius: 8,
-    marginBottom: 10,
-    backgroundColor: '#374151',
-  },
-  messageText: {
-    fontSize: 14,
-    fontFamily: fonts.body,
-    color: '#FFFFFF',
-    lineHeight: 20,
-  },
-  emptyMessages: {
-    alignItems: 'center',
-    paddingVertical: 40,
-  },
-  emptyMessagesText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginTop: 15,
-  },
-  emptyMessagesSubtext: {
-    fontSize: 14,
-    color: '#9CA3AF',
-    marginTop: 5,
+    color: '#E9EDEF',
     textAlign: 'center',
   },
+  predictionVs: {
+    fontSize: 11,
+    color: '#8696A0',
+    marginHorizontal: 8,
+  },
+  predictionScoreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexWrap: 'wrap',
+    marginBottom: 6,
+  },
+  predictionScore: {
+    fontSize: 18,
+    fontFamily: fonts.heading,
+    color: '#E9EDEF',
+  },
+  actualScore: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+  },
+  correctScore: {
+    color: '#00D9FF',
+  },
+  incorrectScore: {
+    color: '#FF6B6B',
+  },
+  predictionLeague: {
+    fontSize: 12,
+    color: '#8696A0',
+    fontStyle: 'italic',
+  },
+  predictionBubbleFooter: {
+    marginTop: 4,
+  },
+  predictionStatusBadge: {
+    alignSelf: 'flex-start',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 12,
+  },
+  pendingBadge: {
+    backgroundColor: '#F59E0B30',
+  },
+  correctBadge: {
+    backgroundColor: '#10B98130',
+  },
+  incorrectBadge: {
+    backgroundColor: '#EF444430',
+  },
+  predictionStatusText: {
+    fontSize: 11,
+    fontFamily: fonts.bodySemiBold,
+  },
+  pendingText: {
+    color: '#FBBF24',
+  },
+  correctText: {
+    color: '#34D399',
+  },
+  incorrectText: {
+    color: '#F87171',
+  },
   messageFormContainer: {
-    backgroundColor: '#1A202C',
+    backgroundColor: '#202C33',
     borderTopWidth: 1,
-    borderTopColor: '#2D3748',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+    borderTopColor: '#2A3942',
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 8,
   },
   messageImagePreview: {
     position: 'relative',
-    marginBottom: 10,
+    marginBottom: 8,
+    marginHorizontal: 8,
   },
   previewImage: {
     width: '100%',
@@ -922,39 +896,150 @@ const styles = StyleSheet.create({
     position: 'absolute',
     top: 5,
     right: 5,
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backgroundColor: 'rgba(0, 0, 0, 0.6)',
     borderRadius: 12,
   },
   messageInputRow: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: 10,
+    gap: 8,
+    paddingHorizontal: 4,
   },
   imageButton: {
     padding: 8,
   },
   messageInput: {
     flex: 1,
-    backgroundColor: '#2D3748',
-    borderRadius: 20,
-    paddingHorizontal: 15,
+    backgroundColor: '#2A3942',
+    borderRadius: 21,
+    paddingHorizontal: 16,
     paddingVertical: 10,
-    fontSize: 14,
+    fontSize: 15,
     fontFamily: fonts.body,
-    color: '#FFFFFF',
+    color: '#E9EDEF',
     maxHeight: 100,
-    borderWidth: 1,
-    borderColor: '#4A5568',
+    borderWidth: 0,
   },
   sendButton: {
-    backgroundColor: '#3B82F6',
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    backgroundColor: '#00A884',
+    width: 42,
+    height: 42,
+    borderRadius: 21,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendButtonDisabled: {
+    backgroundColor: '#2A3942',
     opacity: 0.5,
+  },
+  headerAvatarContainer: {
+    marginRight: 12,
+  },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.7)',
+    justifyContent: 'flex-end',
+  },
+  forumInfoModal: {
+    backgroundColor: '#0B141A',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    maxHeight: '85%',
+    paddingBottom: Platform.OS === 'ios' ? 30 : 20,
+  },
+  forumInfoModalHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: 20,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2A3942',
+  },
+  forumInfoModalTitle: {
+    fontSize: 18,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+  },
+  forumInfoModalContent: {
+    padding: 20,
+  },
+  forumInfoImageContainer: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  forumInfoImage: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#374151',
+  },
+  forumInfoImagePlaceholder: {
+    width: 120,
+    height: 120,
+    borderRadius: 60,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  forumInfoName: {
+    fontSize: 24,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  forumInfoDescriptionContainer: {
+    marginBottom: 25,
+    padding: 15,
+    backgroundColor: '#202C33',
+    borderRadius: 12,
+  },
+  forumInfoDescriptionLabel: {
+    fontSize: 14,
+    fontFamily: fonts.bodySemiBold,
+    color: '#8696A0',
+    marginBottom: 8,
+  },
+  forumInfoDescription: {
+    fontSize: 15,
+    fontFamily: fonts.body,
+    color: '#E9EDEF',
+    lineHeight: 22,
+  },
+  forumInfoStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    marginBottom: 25,
+    paddingVertical: 20,
+    borderTopWidth: 1,
+    borderBottomWidth: 1,
+    borderColor: '#2A3942',
+  },
+  forumInfoStatItem: {
+    alignItems: 'center',
+    gap: 8,
+  },
+  forumInfoStatValue: {
+    fontSize: 20,
+    fontFamily: fonts.heading,
+    color: '#FFFFFF',
+    maxWidth: 120,
+  },
+  forumInfoStatLabel: {
+    fontSize: 12,
+    color: '#8696A0',
+    fontFamily: fonts.body,
+  },
+  forumInfoMeta: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 8,
+    paddingTop: 15,
+  },
+  forumInfoMetaText: {
+    fontSize: 13,
+    color: '#8696A0',
+    fontFamily: fonts.body,
   },
 });

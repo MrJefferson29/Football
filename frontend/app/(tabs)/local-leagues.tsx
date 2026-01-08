@@ -7,12 +7,19 @@ import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
 
 export default function LocalLeaguesScreen() {
+  const [activeTab, setActiveTab] = useState<'local' | 'inter-quarter'>('local');
   const [selectedLeague, setSelectedLeague] = useState<string>('');
   const [showVotingModal, setShowVotingModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
   const [leagues, setLeagues] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
+  
+  // Inter-Quarter League state
+  const [selectedInterQuarterLeague, setSelectedInterQuarterLeague] = useState<string>('');
+  const [interQuarterMatches, setInterQuarterMatches] = useState<any[]>([]);
+  const [interQuarterLeagues, setInterQuarterLeagues] = useState<string[]>([]);
+  const [loadingInterQuarter, setLoadingInterQuarter] = useState(true);
 
   const leagueConfig: { [key: string]: { logo: string; color: string; fullName: string } } = {
     'Cameroon Elite One': { logo: '🇨🇲', color: '#FFD700', fullName: 'Cameroon Elite One' },
@@ -22,6 +29,7 @@ export default function LocalLeaguesScreen() {
 
   useEffect(() => {
     fetchMatches();
+    fetchInterQuarterMatches();
   }, []);
 
   useEffect(() => {
@@ -32,6 +40,14 @@ export default function LocalLeaguesScreen() {
     }
   }, [selectedLeague]);
 
+  useEffect(() => {
+    if (selectedInterQuarterLeague) {
+      fetchInterQuarterMatchesByLeague();
+    } else {
+      fetchInterQuarterMatches();
+    }
+  }, [selectedInterQuarterLeague]);
+
   const fetchMatches = async () => {
     try {
       setLoading(true);
@@ -39,10 +55,11 @@ export default function LocalLeaguesScreen() {
       if (response.success) {
         setMatches(response.data);
         // Extract unique leagues
-        const uniqueLeagues = [...new Set(response.data.map((m: any) => m.league))].filter(Boolean);
+        const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+        const uniqueLeagues = [...new Set(leagueNames)];
         setLeagues(uniqueLeagues);
         if (uniqueLeagues.length > 0 && !selectedLeague) {
-          setSelectedLeague(uniqueLeagues[0] as string);
+          setSelectedLeague(uniqueLeagues[0]);
         }
       }
     } catch (error: any) {
@@ -91,6 +108,12 @@ export default function LocalLeaguesScreen() {
         } else {
           await fetchMatches();
         }
+        // Also refresh inter-quarter matches if we're in that section
+        if (selectedInterQuarterLeague) {
+          await fetchInterQuarterMatchesByLeague();
+        } else {
+          await fetchInterQuarterMatches();
+        }
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to vote');
@@ -102,6 +125,42 @@ export default function LocalLeaguesScreen() {
     setSelectedMatch(null);
   };
 
+  const fetchInterQuarterMatches = async () => {
+    try {
+      setLoadingInterQuarter(true);
+      const response = await matchesAPI.getMatches({ leagueType: 'inter-quarter' });
+      if (response.success) {
+        setInterQuarterMatches(response.data);
+        // Extract unique leagues
+        const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+        const uniqueLeagues: string[] = Array.from(new Set(leagueNames));
+        setInterQuarterLeagues(uniqueLeagues);
+        if (uniqueLeagues.length > 0 && !selectedInterQuarterLeague) {
+          setSelectedInterQuarterLeague(uniqueLeagues[0]);
+        }
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load inter-quarter matches');
+    } finally {
+      setLoadingInterQuarter(false);
+    }
+  };
+
+  const fetchInterQuarterMatchesByLeague = async () => {
+    if (!selectedInterQuarterLeague) return;
+    try {
+      setLoadingInterQuarter(true);
+      const response = await matchesAPI.getMatchesByLeague(selectedInterQuarterLeague, { leagueType: 'inter-quarter' });
+      if (response.success) {
+        setInterQuarterMatches(response.data);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load inter-quarter matches');
+    } finally {
+      setLoadingInterQuarter(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
@@ -110,7 +169,30 @@ export default function LocalLeaguesScreen() {
           <Text style={styles.headerTitle}>Local Leagues</Text>
         </View>
 
-        {/* League Selection */}
+        {/* Tabs */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'local' && styles.activeTab]}
+            onPress={() => setActiveTab('local')}
+          >
+            <Text style={[styles.tabText, activeTab === 'local' && styles.activeTabText]}>
+              Local League
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.tab, activeTab === 'inter-quarter' && styles.activeTab]}
+            onPress={() => setActiveTab('inter-quarter')}
+          >
+            <Text style={[styles.tabText, activeTab === 'inter-quarter' && styles.activeTabText]}>
+              Inter-Quarter
+            </Text>
+          </TouchableOpacity>
+        </View>
+
+        {/* Local League Content */}
+        {activeTab === 'local' && (
+          <>
+            {/* League Selection */}
         {loading && leagues.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#3B82F6" />
@@ -190,19 +272,106 @@ export default function LocalLeaguesScreen() {
           )}
         </View>
 
-        {/* League Info */}
-        {selectedLeague && (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About {leagueConfig[selectedLeague]?.fullName || selectedLeague}</Text>
-            <View style={styles.infoCard}>
-              <Text style={styles.infoText}>
-                {selectedLeague === 'Cameroon Elite One' && "The Cameroon Elite One is the top tier of Cameroonian football, featuring the best clubs from across the country competing for the national championship."}
-                {selectedLeague === 'Cameroon Elite Two' && "The Cameroon Elite Two is the second division of Cameroonian football, where clubs compete for promotion to the Elite One."}
-                {selectedLeague === 'Regional Championships' && "Regional Championships feature the best local clubs from different regions of Cameroon, showcasing grassroots football talent."}
-                {!['Cameroon Elite One', 'Cameroon Elite Two', 'Regional Championships'].includes(selectedLeague) && `Information about ${selectedLeague} will be available soon.`}
-              </Text>
+            {/* League Info */}
+            {selectedLeague && (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>About {leagueConfig[selectedLeague]?.fullName || selectedLeague}</Text>
+                <View style={styles.infoCard}>
+                  <Text style={styles.infoText}>
+                    {selectedLeague === 'Cameroon Elite One' && "The Cameroon Elite One is the top tier of Cameroonian football, featuring the best clubs from across the country competing for the national championship."}
+                    {selectedLeague === 'Cameroon Elite Two' && "The Cameroon Elite Two is the second division of Cameroonian football, where clubs compete for promotion to the Elite One."}
+                    {selectedLeague === 'Regional Championships' && "Regional Championships feature the best local clubs from different regions of Cameroon, showcasing grassroots football talent."}
+                    {!['Cameroon Elite One', 'Cameroon Elite Two', 'Regional Championships'].includes(selectedLeague) && `Information about ${selectedLeague} will be available soon.`}
+                  </Text>
+                </View>
+              </View>
+            )}
+          </>
+        )}
+
+        {/* Inter-Quarter League Content */}
+        {activeTab === 'inter-quarter' && (
+          <>
+            {/* Inter-Quarter League Selection */}
+          {loadingInterQuarter && interQuarterLeagues.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <ActivityIndicator size="large" color="#3B82F6" />
+              <Text style={styles.loadingText}>Loading inter-quarter leagues...</Text>
             </View>
+          ) : (
+            <View style={styles.section}>
+              <Text style={styles.sectionSubtitle}>Select League</Text>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.leaguesScroll}>
+                {interQuarterLeagues.map((leagueName) => {
+                  const config = leagueConfig[leagueName] || { logo: '🏆', color: '#8B5CF6', fullName: leagueName };
+                  return (
+                    <TouchableOpacity 
+                      key={leagueName} 
+                      style={[
+                        styles.leagueCard, 
+                        { backgroundColor: config.color },
+                        selectedInterQuarterLeague === leagueName && styles.selectedLeague
+                      ]}
+                      onPress={() => setSelectedInterQuarterLeague(leagueName)}
+                    >
+                      <Text style={styles.leagueLogo}>{config.logo}</Text>
+                      <Text style={styles.leagueName}>{leagueName}</Text>
+                      {selectedInterQuarterLeague === leagueName && (
+                        <Text style={styles.selectedIndicator}>✓</Text>
+                      )}
+                    </TouchableOpacity>
+                  );
+                })}
+              </ScrollView>
+            </View>
+          )}
+
+          {/* Inter-Quarter Matches */}
+          <View style={styles.section}>
+            <Text style={styles.sectionTitle}>
+              {selectedInterQuarterLeague ? (leagueConfig[selectedInterQuarterLeague]?.fullName || selectedInterQuarterLeague) : 'All'} - Today's Matches
+            </Text>
+            {loadingInterQuarter ? (
+              <View style={styles.loadingContainer}>
+                <ActivityIndicator size="large" color="#3B82F6" />
+                <Text style={styles.loadingText}>Loading matches...</Text>
+              </View>
+            ) : interQuarterMatches.length > 0 ? (
+              interQuarterMatches.map((match: any) => (
+                <TouchableOpacity 
+                  key={match._id || match.id} 
+                  style={styles.matchCard}
+                  onPress={() => handleMatchPress(match)}
+                >
+                  <View style={styles.matchTeams}>
+                    <View style={styles.team}>
+                      <Image 
+                        source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
+                        style={styles.teamLogo} 
+                      />
+                      <Text style={styles.teamName}>{match.homeTeam}</Text>
+                    </View>
+                    <View style={styles.matchCenter}>
+                      <Text style={styles.time}>{match.matchTime}</Text>
+                      <Text style={styles.voteText}>Tap to vote</Text>
+                    </View>
+                    <View style={styles.team}>
+                      <Text style={styles.teamName}>{match.awayTeam}</Text>
+                      <Image 
+                        source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
+                        style={styles.teamLogo} 
+                      />
+                    </View>
+                  </View>
+                </TouchableOpacity>
+              ))
+            ) : (
+              <View style={styles.emptyContainer}>
+                <Text style={styles.emptyText}>No inter-quarter matches available</Text>
+              </View>
+            )}
           </View>
+          </>
         )}
       </ScrollView>
 
@@ -355,5 +524,46 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: '#9CA3AF',
     fontSize: 14,
+  },
+  divider: {
+    height: 1,
+    backgroundColor: '#2D3748',
+    marginVertical: 20,
+  },
+  sectionSubtitle: {
+    fontSize: 16,
+    fontFamily: fonts.bodyMedium,
+    color: '#9CA3AF',
+    marginBottom: 12,
+  },
+  tabContainer: {
+    flexDirection: 'row',
+    backgroundColor: '#2D3748',
+    borderRadius: 8,
+    marginHorizontal: 20,
+    marginBottom: 16,
+    padding: 3,
+    gap: 3,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+    borderRadius: 6,
+  },
+  activeTab: {
+    backgroundColor: '#3B82F6',
+  },
+  tabText: {
+    fontSize: 12,
+    fontFamily: fonts.bodyMedium,
+    color: '#9CA3AF',
+    letterSpacing: 0.2,
+  },
+  activeTabText: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bodySemiBold,
   },
 });

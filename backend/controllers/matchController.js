@@ -244,7 +244,9 @@ exports.voteMatch = async (req, res) => {
 // @access  Public
 exports.getMatch = async (req, res) => {
   try {
-    const match = await Match.findById(req.params.id);
+    const match = await Match.findById(req.params.id)
+      .populate('scorePredictions.userId', 'username avatar');
+    
     if (!match) {
       return res.status(404).json({
         success: false,
@@ -252,9 +254,41 @@ exports.getMatch = async (req, res) => {
       });
     }
 
+    // Get all users who voted on this match
+    const User = require('../models/User');
+    const usersWhoVoted = await User.find({
+      'votes.pollType': 'match',
+      'votes.pollId': match._id
+    }).select('username avatar votes');
+
+    // Map users with their vote choices
+    const userVotes = usersWhoVoted.map(user => {
+      const vote = user.votes.find(v => 
+        v.pollType === 'match' && v.pollId.toString() === match._id.toString()
+      );
+      const scorePrediction = match.scorePredictions.find(sp => 
+        sp.userId && sp.userId._id.toString() === user._id.toString()
+      );
+      return {
+        userId: user._id,
+        username: user.username,
+        avatar: user.avatar || '',
+        voteChoice: vote ? vote.choice : null, // 'home', 'draw', or 'away'
+        scorePrediction: scorePrediction ? {
+          homeScore: scorePrediction.homeScore,
+          awayScore: scorePrediction.awayScore,
+          pointsAwarded: scorePrediction.pointsAwarded,
+          createdAt: scorePrediction.createdAt
+        } : null
+      };
+    });
+
+    const matchData = match.toObject();
+    matchData.userVotes = userVotes;
+
     res.status(200).json({
       success: true,
-      data: match
+      data: matchData
     });
   } catch (error) {
     res.status(500).json({
@@ -303,8 +337,11 @@ exports.updateMatchScore = async (req, res) => {
     match.pointsAwardedAt = new Date();
 
     const User = require('../models/User');
+    const Prediction = require('../models/Prediction');
     const PREDICTION_POINTS = 100; // Points for correct prediction
+    const FORUM_PREDICTION_POINTS = 150; // Points for forum head correct prediction
     let pointsAwardedCount = 0;
+    let forumPointsAwardedCount = 0;
 
     // Check all score predictions and award points
     for (const prediction of match.scorePredictions) {
@@ -343,14 +380,104 @@ exports.updateMatchScore = async (req, res) => {
       }
     }
 
+    // Normalize team names for comparison (case-insensitive, trimmed)
+    const normalizeTeamName = (name) => name.trim().toLowerCase();
+    const escapeRegex = (str) => str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const normalizedHomeTeam = normalizeTeamName(match.homeTeam);
+    const normalizedAwayTeam = normalizeTeamName(match.awayTeam);
+
+    // Find predictions from Prediction model that match this match
+    // Match by team names (both combinations: team1/team2 and home/away) and match date
+    const matchDateStart = new Date(match.matchDate);
+    matchDateStart.setHours(0, 0, 0, 0);
+    const matchDateEnd = new Date(match.matchDate);
+    matchDateEnd.setHours(23, 59, 59, 999);
+
+    const forumPredictions = await Prediction.find({
+      status: { $in: ['pending', 'live'] },
+      matchDate: { $gte: matchDateStart, $lte: matchDateEnd },
+      $or: [
+        // Match: homeTeam = team1, awayTeam = team2
+        {
+          'team1.name': { $regex: new RegExp(`^${escapeRegex(match.homeTeam.trim())}$`, 'i') },
+          'team2.name': { $regex: new RegExp(`^${escapeRegex(match.awayTeam.trim())}$`, 'i') }
+        },
+        // Match: homeTeam = team2, awayTeam = team1
+        {
+          'team1.name': { $regex: new RegExp(`^${escapeRegex(match.awayTeam.trim())}$`, 'i') },
+          'team2.name': { $regex: new RegExp(`^${escapeRegex(match.homeTeam.trim())}$`, 'i') }
+        }
+      ]
+    }).populate('headUserId', 'points correctPredictions totalPredictions');
+
+    // Check and award points for forum predictions
+    for (const forumPrediction of forumPredictions) {
+      if (forumPrediction.isCorrect !== null) continue; // Already checked
+
+      // Determine if teams match in correct order
+      const isTeam1Home = normalizeTeamName(forumPrediction.team1.name) === normalizedHomeTeam;
+      const predictedScore1 = isTeam1Home ? forumPrediction.predictedScore.team1 : forumPrediction.predictedScore.team2;
+      const predictedScore2 = isTeam1Home ? forumPrediction.predictedScore.team2 : forumPrediction.predictedScore.team1;
+
+      const isCorrect = predictedScore1 === homeScore && predictedScore2 === awayScore;
+
+      // Update prediction status
+      forumPrediction.isCorrect = isCorrect;
+      forumPrediction.status = 'completed';
+      forumPrediction.actualScore = {
+        team1: isTeam1Home ? homeScore : awayScore,
+        team2: isTeam1Home ? awayScore : homeScore
+      };
+
+      if (isCorrect && forumPrediction.headUserId) {
+        const forumHead = forumPrediction.headUserId;
+        if (typeof forumHead === 'object') {
+          // Award points to forum head
+          forumHead.points = (forumHead.points || 0) + FORUM_PREDICTION_POINTS;
+          forumHead.correctPredictions = (forumHead.correctPredictions || 0) + 1;
+          forumHead.totalPredictions = (forumHead.totalPredictions || 0) + 1;
+
+          // Add activity
+          forumHead.activities.push({
+            action: `Earned ${FORUM_PREDICTION_POINTS} points for correct forum prediction: ${forumPrediction.team1.name} ${predictedScore1}-${predictedScore2} ${forumPrediction.team2.name}`,
+            type: 'prediction',
+            details: {
+              matchId: match._id,
+              predictionId: forumPrediction._id,
+              points: FORUM_PREDICTION_POINTS,
+              prediction: `${predictedScore1}-${predictedScore2}`,
+              actualScore: `${homeScore}-${awayScore}`
+            }
+          });
+
+          await forumHead.save();
+          forumPointsAwardedCount++;
+        }
+      } else if (!isCorrect && forumPrediction.headUserId) {
+        const forumHead = forumPrediction.headUserId;
+        if (typeof forumHead === 'object') {
+          // Still increment total predictions for incorrect ones
+          forumHead.totalPredictions = (forumHead.totalPredictions || 0) + 1;
+          await forumHead.save();
+        }
+      }
+
+      await forumPrediction.save();
+    }
+
     await match.save();
+
+    const totalPointsAwarded = pointsAwardedCount + forumPointsAwardedCount;
+    const message = `Match score updated. ${pointsAwardedCount} user(s) and ${forumPointsAwardedCount} forum head(s) earned points.`;
 
     res.status(200).json({
       success: true,
-      message: `Match score updated. ${pointsAwardedCount} users earned points.`,
+      message,
       data: {
         match,
-        pointsAwarded: pointsAwardedCount
+        pointsAwarded: totalPointsAwarded,
+        userPointsAwarded: pointsAwardedCount,
+        forumPointsAwarded: forumPointsAwardedCount
       }
     });
   } catch (error) {
