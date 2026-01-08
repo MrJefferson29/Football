@@ -73,16 +73,26 @@ export default function HighlightsScreen() {
               // Extract video ID from YouTube URL if needed
               const videoId = video.youtubeUrl?.includes('youtube.com') 
                 ? video.youtubeUrl.split('v=')[1]?.split('&')[0] 
-                : video.youtubeUrl?.replace('https://youtu.be/', '') || video._id;
+                : video.youtubeUrl?.includes('youtu.be/')
+                ? video.youtubeUrl.split('youtu.be/')[1]?.split('?')[0]
+                : video.youtubeUrl?.includes('youtube.com/live/')
+                ? video.youtubeUrl.split('youtube.com/live/')[1]?.split('?')[0]
+                : video.youtubeUrl?.includes('youtube.com/embed/')
+                ? video.youtubeUrl.split('embed/')[1]?.split('?')[0]
+                : video.youtubeUrl?.includes('youtube.com/shorts/')
+                ? video.youtubeUrl.split('shorts/')[1]?.split('?')[0]
+                : video._id;
               
               return (
                 <View key={video._id || video.id} style={styles.videoContainer}>
                   <YouTubeVideoCard
+                    id={video._id || video.id}
                     videoId={videoId}
                     title={video.title}
                     thumbnail={video.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
                     duration={video.duration || "0:00"}
                     views={video.views || "0 views"}
+                    youtubeUrl={video.youtubeUrl}
                   />
                 </View>
               );

@@ -4,7 +4,7 @@ const User = require('../models/User');
 // Helper to compute country and age group statistics for a poll
 const updatePollStatistics = async (pollId) => {
   try {
-    const poll = await Poll.findById(pollId);
+    const poll = await Poll.findById(pollId).populate('scorePredictions.userId', 'country age');
     if (!poll) return;
 
     // Get all users who voted on this poll
@@ -25,6 +25,8 @@ const updatePollStatistics = async (pollId) => {
       poll.statistics = poll.statistics || {};
       poll.statistics.countryBreakdown = [];
       poll.statistics.ageGroupBreakdown = [];
+      poll.statistics.matchPredictions = [];
+      poll.statistics.scorePredictions = [];
       await poll.save();
       return;
     }
@@ -67,9 +69,44 @@ const updatePollStatistics = async (pollId) => {
       color: makeColor(index)
     }));
 
+    // Calculate match predictions (outcome predictions)
+    const matchPredictionCounts = {};
+    voters.forEach((voter) => {
+      const prediction = voter.choice === 'option1' ? `${poll.option1.name} wins` : `${poll.option2.name} wins`;
+      matchPredictionCounts[prediction] = (matchPredictionCounts[prediction] || 0) + 1;
+    });
+
+    const matchPredictions = Object.entries(matchPredictionCounts).map(([prediction, count], index) => ({
+      prediction,
+      percentage: Math.round((count / total) * 100),
+      color: makeColor(index)
+    }));
+
+    // Calculate score predictions (for daily polls)
+    let scorePredictions = [];
+    if (poll.type === 'daily-poll' && poll.scorePredictions && poll.scorePredictions.length > 0) {
+      const scoreCounts = {};
+      poll.scorePredictions.forEach((pred) => {
+        const scoreStr = `${pred.homeScore}-${pred.awayScore}`;
+        scoreCounts[scoreStr] = (scoreCounts[scoreStr] || 0) + 1;
+      });
+
+      const totalScorePredictions = poll.scorePredictions.length;
+      scorePredictions = Object.entries(scoreCounts)
+        .map(([score, count], index) => ({
+          score,
+          percentage: Math.round((count / totalScorePredictions) * 100),
+          color: makeColor(index)
+        }))
+        .sort((a, b) => b.percentage - a.percentage) // Sort by percentage descending
+        .slice(0, 10); // Limit to top 10 most common scores
+    }
+
     poll.statistics = poll.statistics || {};
     poll.statistics.countryBreakdown = countryBreakdown;
     poll.statistics.ageGroupBreakdown = ageGroupBreakdown;
+    poll.statistics.matchPredictions = matchPredictions;
+    poll.statistics.scorePredictions = scorePredictions;
 
     await poll.save();
   } catch (err) {
@@ -179,7 +216,7 @@ exports.createPoll = async (req, res) => {
 exports.votePoll = async (req, res) => {
   try {
     const { id } = req.params;
-    const { choice } = req.body; // 'option1' or 'option2'
+    let { choice, homeScore, awayScore } = req.body; // 'option1' or 'option2', optional scores for daily polls
 
     const poll = await Poll.findById(id);
     if (!poll || !poll.isActive) {
@@ -199,6 +236,37 @@ exports.votePoll = async (req, res) => {
       return res.status(400).json({
         success: false,
         message: 'You have already voted on this poll'
+      });
+    }
+
+    // For daily polls, if scores are provided, determine choice automatically
+    if (poll.type === 'daily-poll' && homeScore !== undefined && awayScore !== undefined) {
+      const homeScoreNum = parseInt(homeScore);
+      const awayScoreNum = parseInt(awayScore);
+      
+      if (isNaN(homeScoreNum) || isNaN(awayScoreNum)) {
+        return res.status(400).json({
+          success: false,
+          message: 'Invalid scores. Must be valid numbers'
+        });
+      }
+
+      // Determine choice based on scores
+      if (homeScoreNum > awayScoreNum) {
+        choice = 'option1';
+      } else if (awayScoreNum > homeScoreNum) {
+        choice = 'option2';
+      } else {
+        // Draw - default to option1, but you could handle this differently
+        choice = 'option1';
+      }
+
+      // Store score prediction
+      poll.scorePredictions = poll.scorePredictions || [];
+      poll.scorePredictions.push({
+        userId: user._id,
+        homeScore: homeScoreNum,
+        awayScore: awayScoreNum
       });
     }
 
@@ -235,7 +303,11 @@ exports.votePoll = async (req, res) => {
       details: {
         pollId: poll._id,
         pollType: poll.type,
-        choice
+        choice,
+        ...(poll.type === 'daily-poll' && homeScore !== undefined && awayScore !== undefined ? {
+          homeScore: parseInt(homeScore),
+          awayScore: parseInt(awayScore)
+        } : {})
       }
     });
     user.lastActiveAt = new Date();
@@ -271,9 +343,15 @@ exports.getPollResults = async (req, res) => {
       });
     }
 
+    // Ensure statistics are up to date
+    await updatePollStatistics(poll._id);
+    
+    // Fetch the poll again to get updated statistics
+    const updatedPoll = await Poll.findById(id);
+
     res.status(200).json({
       success: true,
-      data: poll
+      data: updatedPoll
     });
   } catch (error) {
     res.status(500).json({

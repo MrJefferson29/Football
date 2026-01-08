@@ -33,6 +33,10 @@ export const API_ENDPOINTS = {
   // Highlights
   HIGHLIGHTS: {
     BASE: `${API_BASE_URL}/highlights`,
+    BY_ID: (id: string) => `${API_BASE_URL}/highlights/${id}`,
+    COMMENTS: (id: string) => `${API_BASE_URL}/highlights/${id}/comments`,
+    REPLY: (id: string, commentId: string) => `${API_BASE_URL}/highlights/${id}/comments/${commentId}/reply`,
+    LIKE_COMMENT: (id: string, commentId: string) => `${API_BASE_URL}/highlights/${id}/comments/${commentId}/like`,
   },
   // News
   NEWS: {

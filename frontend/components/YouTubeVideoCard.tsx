@@ -9,6 +9,8 @@ interface YouTubeVideoCardProps {
   thumbnail: string;
   duration?: string;
   views?: string;
+  id?: string; // Highlight ID for fetching full details
+  youtubeUrl?: string; // Actual YouTube URL from highlight data
 }
 
 export default function YouTubeVideoCard({ 
@@ -16,16 +18,20 @@ export default function YouTubeVideoCard({
   title, 
   thumbnail, 
   duration = '10:30',
-  views = '1.2M views'
+  views = '1.2M views',
+  id,
+  youtubeUrl
 }: YouTubeVideoCardProps) {
   const handlePress = () => {
-    const youtubeUrl = `https://www.youtube.com/watch?v=${videoId}`;
+    // Use provided youtubeUrl or construct from videoId
+    const actualYoutubeUrl = youtubeUrl || `https://www.youtube.com/watch?v=${videoId}`;
     router.push({
       pathname: '/video-details',
       params: {
+        id: id || '',
         videoId,
         title,
-        youtubeUrl,
+        youtubeUrl: actualYoutubeUrl,
       },
     });
   };

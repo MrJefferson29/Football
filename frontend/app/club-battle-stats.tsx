@@ -1,16 +1,21 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { pollsAPI } from '@/utils/api';
 import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 
 export default function ClubBattleStatsScreen() {
   const [activeTab, setActiveTab] = useState('overview');
   const [poll, setPoll] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const viewShotRef = useRef(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     fetchClubBattlePoll();
@@ -46,8 +51,35 @@ export default function ClubBattleStatsScreen() {
   const countryBreakdown = poll?.statistics?.countryBreakdown || [];
   const ageGroupBreakdown = poll?.statistics?.ageGroupBreakdown || [];
 
-  const handleShare = () => {
-    Alert.alert('Share', 'Club battle statistics shared successfully!');
+  const handleShare = async () => {
+    if (!viewShotRef.current) {
+      Alert.alert('Error', 'Unable to capture screenshot');
+      return;
+    }
+
+    try {
+      setIsCapturing(true);
+      const uri = await captureRef(viewShotRef.current, {
+        format: 'png',
+        quality: 0.9,
+        result: 'tmpfile',
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share Club Battle Statistics',
+        });
+      } else {
+        Alert.alert('Error', 'Sharing is not available on this device');
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+      Alert.alert('Error', 'Failed to share statistics. Please try again.');
+    } finally {
+      setIsCapturing(false);
+    }
   };
 
   if (loading) {
@@ -75,11 +107,11 @@ export default function ClubBattleStatsScreen() {
           <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
-          <Text style={styles.headerTitle}>Club Battle Statistics</Text>
+          <Text style={styles.headerTitle}>{poll.question} Statistics</Text>
           <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
-          <Text style={styles.emptyText}>No club battle poll found</Text>
+          <Text style={styles.emptyText}>No {poll.question} poll found</Text>
         </View>
       </SafeAreaView>
     );
@@ -87,15 +119,26 @@ export default function ClubBattleStatsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
-          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
-        </TouchableOpacity>
-        <Text style={styles.headerTitle}>Club Battle Statistics</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={styles.viewShot}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{poll.question} Statistics</Text>
+          <TouchableOpacity 
+            onPress={handleShare} 
+            disabled={isCapturing || loading}
+            style={styles.shareButton}
+          >
+            {isCapturing ? (
+              <ActivityIndicator size="small" color="#3B82F6" />
+            ) : (
+              <Ionicons name="share-outline" size={24} color="#3B82F6" />
+            )}
+          </TouchableOpacity>
+        </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
         {/* Tab Navigation */}
         <View style={styles.tabContainer}>
           <TouchableOpacity 
@@ -279,17 +322,18 @@ export default function ClubBattleStatsScreen() {
           </>
         )}
 
-        {/* Share Button */}
-        <TouchableOpacity style={styles.shareButton} onPress={handleShare}>
-          <Text style={styles.shareButtonText}>Share Statistics</Text>
-        </TouchableOpacity>
-      </ScrollView>
+        </ScrollView>
+      </ViewShot>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: {
+    flex: 1,
+    backgroundColor: '#1A202C',
+  },
+  viewShot: {
     flex: 1,
     backgroundColor: '#1A202C',
   },
@@ -301,6 +345,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#2D3748',
+  },
+  shareButton: {
+    padding: 5,
   },
   backButton: {
     padding: 5,
@@ -547,18 +594,6 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: fonts.bodySemiBold,
     color: '#3B82F6',
-  },
-  shareButton: {
-    backgroundColor: '#3B82F6',
-    borderRadius: 12,
-    paddingVertical: 16,
-    alignItems: 'center',
-    marginTop: 20,
-  },
-  shareButtonText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
   },
   loadingContainer: {
     flex: 1,

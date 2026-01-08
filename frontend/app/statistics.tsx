@@ -1,15 +1,20 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacity, View, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
 import { statisticsAPI } from '@/utils/api';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 
 export default function StatisticsScreen() {
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
+  const viewShotRef = useRef<ViewShot>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
     fetchStatistics();
@@ -32,6 +37,37 @@ export default function StatisticsScreen() {
       Alert.alert('Error', error.message || 'Failed to load statistics');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleShare = async () => {
+    if (!viewShotRef.current) {
+      Alert.alert('Error', 'Unable to capture screenshot');
+      return;
+    }
+
+    try {
+      setIsCapturing(true);
+      const uri = await captureRef(viewShotRef.current, {
+        format: 'png',
+        quality: 0.9,
+        result: 'tmpfile',
+      });
+
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share Statistics',
+        });
+      } else {
+        Alert.alert('Error', 'Sharing is not available on this device');
+      }
+    } catch (error: any) {
+      console.error('Error sharing:', error);
+      Alert.alert('Error', 'Failed to share statistics. Please try again.');
+    } finally {
+      setIsCapturing(false);
     }
   };
 
@@ -267,12 +303,23 @@ export default function StatisticsScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-        {/* Header */}
-        <View style={styles.header}>
-          <Text style={styles.headerTitle}>Statistics</Text>
-          <View style={styles.placeholder} />
-        </View>
+      <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={styles.viewShot}>
+        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
+          {/* Header */}
+          <View style={styles.header}>
+            <Text style={styles.headerTitle}>Statistics</Text>
+            <TouchableOpacity 
+              onPress={handleShare} 
+              disabled={isCapturing || loading}
+              style={styles.shareButton}
+            >
+              {isCapturing ? (
+                <ActivityIndicator size="small" color="#3B82F6" />
+              ) : (
+                <Ionicons name="share-outline" size={24} color="#3B82F6" />
+              )}
+            </TouchableOpacity>
+          </View>
 
         {/* Tab Navigation */}
         <View style={styles.tabContainer}>
@@ -302,11 +349,12 @@ export default function StatisticsScreen() {
           </TouchableOpacity>
         </View>
 
-        {/* Tab Content */}
-        {activeTab === 'overview' && renderOverviewTab()}
-        {activeTab === 'engagement' && renderEngagementTab()}
-        {activeTab === 'activity' && renderActivityTab()}
-      </ScrollView>
+          {/* Tab Content */}
+          {activeTab === 'overview' && renderOverviewTab()}
+          {activeTab === 'engagement' && renderEngagementTab()}
+          {activeTab === 'activity' && renderActivityTab()}
+        </ScrollView>
+      </ViewShot>
     </SafeAreaView>
   );
 }
@@ -319,6 +367,10 @@ const styles = StyleSheet.create({
   scrollView: {
     flex: 1,
   },
+  viewShot: {
+    flex: 1,
+    backgroundColor: '#1A202C',
+  },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -327,6 +379,9 @@ const styles = StyleSheet.create({
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#2D3748',
+  },
+  shareButton: {
+    padding: 5,
   },
   backButton: {
     padding: 5,

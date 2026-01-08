@@ -1,176 +1,344 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useRef, useState } from 'react';
-import { ActivityIndicator, Alert, Dimensions, Linking, SafeAreaView, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
-import WebView from 'react-native-webview';
+import { useRef, useState, useEffect } from 'react';
+import { ActivityIndicator, Alert, Dimensions, Linking, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, FlatList, Image, KeyboardAvoidingView, Platform } from 'react-native';
+import { highlightsAPI } from '@/utils/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { fonts } from '@/utils/typography';
+import { getDirectImageUrl } from '@/utils/imageUtils';
+import YoutubePlayer from 'react-native-youtube-iframe';
 
 export default function VideoDetail() {
   const router = useRouter();
   const params = useLocalSearchParams();
-  const { videoId, title, youtubeUrl } = params;
-  const [isLoading, setIsLoading] = useState(true);
+  const { id, videoId, title, youtubeUrl } = params;
+  const { user } = useAuth();
+  const [highlight, setHighlight] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [playing, setPlaying] = useState(false);
   const [error, setError] = useState(null);
-  const webViewRef = useRef(null);
-  const [comments, setComments] = useState([
-    { id: 1, user: 'FootballFan99', text: 'Amazing skills! This player is incredible', time: '2h ago' },
-    { id: 2, user: 'SoccerLover', text: 'That goal was pure magic! 🔥', time: '1h ago' },
-    { id: 3, user: 'SportsEnthusiast', text: 'Best highlights I\'ve seen today', time: '30m ago' },
-  ]);
   const [newComment, setNewComment] = useState('');
+  const [replyingTo, setReplyingTo] = useState(null);
+  const [replyText, setReplyText] = useState('');
+  const flatListRef = useRef(null);
 
-  console.log('Video Details Params:', { videoId, title, youtubeUrl });
+  useEffect(() => {
+    fetchHighlight();
+  }, [id]);
+
+  const fetchHighlight = async () => {
+    if (!id) {
+      setLoading(false);
+      return;
+    }
+
+    try {
+      setLoading(true);
+      const response = await highlightsAPI.getHighlight(id);
+      if (response.success && response.data) {
+        setHighlight(response.data);
+      } else {
+        setLoading(false);
+        Alert.alert('Error', response.message || 'Failed to load highlight');
+      }
+    } catch (error) {
+      console.error('Error fetching highlight:', error);
+      setLoading(false);
+      // Don't show alert if it's just a route not found - might be a temporary issue
+      if (error.message && error.message.includes('Route not found')) {
+        console.warn('Route not found - this might be a backend routing issue');
+      } else {
+        Alert.alert('Error', error.message || 'Failed to load highlight');
+      }
+    }
+  };
+
+  const getYouTubeVideoId = (url) => {
+    if (!url) return '';
+    
+    // Handle YouTube Live URLs
+    if (url.includes('youtube.com/live/')) {
+      return url.split('youtube.com/live/')[1]?.split('?')[0]?.split('&')[0] || '';
+    }
+    // Handle standard watch URLs
+    else if (url.includes('youtube.com/watch?v=')) {
+      return url.split('v=')[1]?.split('&')[0] || '';
+    }
+    // Handle short URLs
+    else if (url.includes('youtu.be/')) {
+      return url.split('youtu.be/')[1]?.split('?')[0] || '';
+    }
+    // Handle embed URLs
+    else if (url.includes('youtube.com/embed/')) {
+      return url.split('embed/')[1]?.split('?')[0] || '';
+    }
+    // Handle YouTube Shorts
+    else if (url.includes('youtube.com/shorts/')) {
+      return url.split('shorts/')[1]?.split('?')[0] || '';
+    }
+    // Assume it's already a video ID
+    else {
+      return url;
+    }
+  };
+
+  const actualVideoId = highlight ? getYouTubeVideoId(highlight.youtubeUrl) : (videoId || getYouTubeVideoId(youtubeUrl));
+  const actualTitle = highlight ? highlight.title : title;
+  const actualYoutubeUrl = highlight ? highlight.youtubeUrl : youtubeUrl;
+  const thumbnailUrl = highlight?.thumbnail 
+    ? getDirectImageUrl(highlight.thumbnail) 
+    : (actualVideoId ? `https://img.youtube.com/vi/${actualVideoId}/maxresdefault.jpg` : null);
 
   const handleWatchFullVideo = () => {
-    console.log('Opening YouTube URL:', youtubeUrl);
-    Linking.openURL(youtubeUrl)
+    const url = actualYoutubeUrl || `https://www.youtube.com/watch?v=${actualVideoId}`;
+    Linking.openURL(url)
       .catch(err => {
         console.error('Error opening YouTube link:', err);
         Alert.alert('Error', 'Something went wrong while opening the video');
       });
   };
 
-  const htmlContent = `
-    <!DOCTYPE html>
-    <html>
-      <head>
-        <meta name="viewport" content="width=device-width, initial-scale=1.0">
-        <style>
-          body { 
-            margin: 0; 
-            background-color: black;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-          }
-          #player {
-            width: 100%;
-            height: 100%;
-          }
-        </style>
-      </head>
-      <body>
-        <div id="player"></div>
-        <script>
-          var tag = document.createElement('script');
-          tag.src = "https://www.youtube.com/iframe_api";
-          var firstScriptTag = document.getElementsByTagName('script')[0];
-          firstScriptTag.parentNode.insertBefore(tag, firstScriptTag);
+  const handleSendComment = async () => {
+    if (!newComment.trim() || !highlight || !user) return;
 
-          var player;
-          function onYouTubeIframeAPIReady() {
-            player = new YT.Player('player', {
-              height: '100%',
-              width: '100%',
-              videoId: '${videoId}',
-              playerVars: {
-                'autoplay': 1,
-                'playsinline': 1,
-                'modestbranding': 1,
-                'rel': 0,
-                'showinfo': 0,
-                'controls': 1,
-                'iv_load_policy': 3,
-                'cc_load_policy': 0,
-                'fs': 0,
-                'disablekb': 1
-              },
-              events: {
-                'onReady': onPlayerReady,
-                'onStateChange': onPlayerStateChange,
-                'onError': onPlayerError
-              }
-            });
-          }
+    const tempComment = {
+      _id: Date.now().toString(),
+      userId: {
+        _id: user._id,
+        username: user.username,
+        avatar: user.avatar,
+      },
+      message: newComment,
+      likes: 0,
+      replies: [],
+      createdAt: new Date().toISOString(),
+    };
 
-          function onPlayerReady(event) {
-            console.log('Player is ready');
-            window.ReactNativeWebView.postMessage('player_ready');
-            event.target.playVideo();
-          }
+    // Optimistic update
+    setHighlight(prev =>
+      prev
+        ? { ...prev, comments: [...prev.comments, tempComment] }
+        : prev
+    );
 
-          function onPlayerStateChange(event) {
-            console.log('Player state changed:', event.data);
-            window.ReactNativeWebView.postMessage('player_state:' + event.data);
-          }
+    const commentText = newComment;
+    setNewComment('');
 
-          function onPlayerError(event) {
-            console.error('Player error:', event.data);
-            window.ReactNativeWebView.postMessage('player_error:' + event.data);
-          }
-        </script>
-      </body>
-    </html>
-  `;
-
-  const handleWebViewError = (syntheticEvent) => {
-    const { nativeEvent } = syntheticEvent;
-    console.error('WebView Error:', nativeEvent);
-    setError('Failed to load video. Please try again.');
-  };
-
-  const handleWebViewLoad = () => {
-    console.log('WebView loaded successfully');
-    setIsLoading(false);
-  };
-
-  const handleMessage = (event) => {
-    const message = event.nativeEvent.data;
-    console.log('Received message from WebView:', message);
-    
-    if (message === 'player_ready') {
-      setIsLoading(false);
-    } else if (message.startsWith('player_error')) {
-      const errorCode = message.split(':')[1];
-      console.error('YouTube Player Error:', errorCode);
-      
-      // Handle specific error codes
-      if (errorCode === '150') {
-        Alert.alert(
-          'Video Not Available',
-          'This video cannot be played in the app. Would you like to watch it on YouTube instead?',
-          [
-            {
-              text: 'Cancel',
-              style: 'cancel',
-              onPress: () => router.back()
-            },
-            {
-              text: 'Watch on YouTube',
-              onPress: handleWatchFullVideo
-            }
-          ]
-        );
-      } else {
-        setError('Failed to load video. Please try again.');
-      }
+    try {
+      await highlightsAPI.addComment(highlight._id, commentText);
+      await fetchHighlight(); // Refresh to get updated comments
+    } catch (error) {
+      // Revert optimistic update on error
+      setHighlight(prev =>
+        prev
+          ? { ...prev, comments: prev.comments.filter(c => c._id !== tempComment._id) }
+          : prev
+      );
+      Alert.alert('Error', error.message || 'Message failed to send');
     }
   };
+
+  const handleSendReply = async () => {
+    if (!replyText.trim() || !replyingTo || !highlight) return;
+
+    try {
+      const response = await highlightsAPI.replyToComment(highlight._id, replyingTo, replyText);
+      if (response.success) {
+        setReplyText('');
+        setReplyingTo(null);
+        await fetchHighlight(); // Refresh to get updated comments
+      } else {
+        Alert.alert('Error', response.message || 'Failed to send reply');
+      }
+    } catch (error) {
+      console.error('Error sending reply:', error);
+      Alert.alert('Error', error.message || 'Failed to send reply');
+    }
+  };
+
+  const handleLikeComment = async (commentId) => {
+    if (!highlight) return;
+
+    try {
+      const response = await highlightsAPI.likeComment(highlight._id, commentId);
+      if (response.success) {
+        await fetchHighlight(); // Refresh to get updated likes
+      }
+    } catch (error) {
+      console.error('Error liking comment:', error);
+    }
+  };
+
+  const formatTimeAgo = (dateString) => {
+    const now = new Date();
+    const date = new Date(dateString);
+    const diff = now.getTime() - date.getTime();
+    const seconds = Math.floor(diff / 1000);
+    const minutes = Math.floor(seconds / 60);
+    const hours = Math.floor(minutes / 60);
+
+    if (seconds < 60) return 'now';
+    if (minutes < 60) return `${minutes}m ago`;
+    if (hours < 24) return `${hours}h ago`;
+    return date.toLocaleDateString();
+  };
+
+  const renderReply = (reply, commentId) => (
+    <View key={reply._id} style={styles.replyItem}>
+      <Image
+        source={{ uri: reply.userId.avatar || 'https://via.placeholder.com/32' }}
+        style={styles.replyAvatar}
+      />
+      <View style={styles.commentContent}>
+        <View style={styles.commentHeader}>
+          <Text style={styles.commentUser}>{reply.userId.username}</Text>
+          <Text style={styles.commentTime}>{formatTimeAgo(reply.createdAt)}</Text>
+        </View>
+        <Text style={styles.commentText}>{reply.message}</Text>
+        <TouchableOpacity style={styles.commentLike}>
+          <Ionicons name="heart-outline" size={12} color="#9CA3AF" />
+          <Text style={styles.commentLikeCount}>{reply.likes || 0}</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  const renderComment = ({ item }) => (
+    <View style={styles.commentItem}>
+      <Image
+        source={{ uri: item.userId.avatar || 'https://via.placeholder.com/32' }}
+        style={styles.commentAvatar}
+      />
+      <View style={styles.commentContent}>
+        <View style={styles.commentHeader}>
+          <Text style={styles.commentUser}>{item.userId.username}</Text>
+          <Text style={styles.commentTime}>{formatTimeAgo(item.createdAt)}</Text>
+        </View>
+        <Text style={styles.commentText}>{item.message}</Text>
+        <View style={styles.commentActions}>
+          <TouchableOpacity
+            style={styles.commentLike}
+            onPress={() => handleLikeComment(item._id)}
+          >
+            <Ionicons name="heart-outline" size={14} color="#9CA3AF" />
+            <Text style={styles.commentLikeCount}>{item.likes || 0}</Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={styles.replyButton}
+            onPress={() => setReplyingTo(item._id)}
+          >
+            <Ionicons name="return-down-forward-outline" size={14} color="#9CA3AF" />
+            <Text style={styles.replyButtonText}>Reply</Text>
+          </TouchableOpacity>
+        </View>
+        {item.replies && item.replies.length > 0 && (
+          <View style={styles.repliesContainer}>
+            {item.replies.map((reply) => renderReply(reply, item._id))}
+          </View>
+        )}
+      </View>
+    </View>
+  );
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading highlight...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!highlight && !actualVideoId) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Video</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.loadingText}>Highlight not found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar style="light" />
       
+      {/* Header */}
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+          <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+        </TouchableOpacity>
+        <Text style={styles.headerTitle} numberOfLines={1}>{actualTitle || 'Video'}</Text>
+        <View style={styles.placeholder} />
+      </View>
 
-      
       {/* Video Player */}
       <View style={styles.videoContainer}>
-        {isLoading && (
-          <View style={styles.loadingContainer}>
-            <ActivityIndicator size="large" color="#FF0000" />
-            <Text style={styles.loadingText}>Loading video...</Text>
+        {!playing && thumbnailUrl && (
+          <View style={styles.thumbnailContainer}>
+            <Image
+              source={{ uri: thumbnailUrl }}
+              style={styles.thumbnail}
+              resizeMode="cover"
+            />
+            <View style={styles.playButtonOverlay}>
+              <TouchableOpacity
+                style={styles.playButton}
+                onPress={() => setPlaying(true)}
+              >
+                <Ionicons name="play" size={48} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
         )}
-        {error && (
+        {playing && actualVideoId && (
+          <YoutubePlayer
+            height={Dimensions.get('window').height * 0.4}
+            videoId={actualVideoId}
+            play={playing}
+            onChangeState={(state) => {
+              if (state === 'ended' || state === 'paused') {
+                setPlaying(false);
+              }
+            }}
+            onError={(error) => {
+              console.error('YouTube Player Error:', error);
+              setError('Failed to play video');
+              setPlaying(false);
+              Alert.alert(
+                'Playback Error',
+                'Unable to play this video. Would you like to watch it on YouTube instead?',
+                [
+                  { text: 'Cancel', style: 'cancel' },
+                  { text: 'Watch on YouTube', onPress: handleWatchFullVideo }
+                ]
+              );
+            }}
+            webViewProps={{
+              allowsInlineMediaPlayback: true,
+              mediaPlaybackRequiresUserAction: false,
+            }}
+            webViewStyle={{ opacity: 0.99 }}
+          />
+        )}
+        {error && !playing && (
           <View style={styles.errorContainer}>
             <Text style={styles.errorText}>{error}</Text>
             <TouchableOpacity 
               style={styles.retryButton}
               onPress={() => {
                 setError(null);
-                setIsLoading(true);
-                webViewRef.current?.reload();
+                setPlaying(true);
               }}
             >
               <Text style={styles.retryButtonText}>Retry</Text>
@@ -183,72 +351,88 @@ export default function VideoDetail() {
             </TouchableOpacity>
           </View>
         )}
-        <WebView
-          ref={webViewRef}
-          style={styles.video}
-          javaScriptEnabled={true}
-          source={{ html: htmlContent }}
-          allowsFullscreenVideo={true}
-          mediaPlaybackRequiresUserAction={false}
-          domStorageEnabled={true}
-          startInLoadingState={true}
-          scalesPageToFit={true}
-          mixedContentMode="always"
-          onError={handleWebViewError}
-          onLoad={handleWebViewLoad}
-          onMessage={handleMessage}
-          onHttpError={(syntheticEvent) => {
-            const { nativeEvent } = syntheticEvent;
-            console.error('WebView HTTP Error:', nativeEvent);
-            setError('Network error. Please check your connection.');
-          }}
-        />
+      </View>
+
+      {/* Description */}
+      <View style={styles.descriptionContainer}>
+        {highlight?.category && (
+          <View style={styles.categoryBadge}>
+            <Text style={styles.categoryText}>{highlight.category}</Text>
+          </View>
+        )}
+        <Text style={styles.descriptionText}>
+          {highlight?.description || 'No description available'}
+        </Text>
+        {highlight?.views && (
+          <Text style={styles.viewsText}>{highlight.views} views</Text>
+        )}
       </View>
 
       {/* Comments Section */}
-      <ScrollView style={styles.commentsContainer}>
-        <Text style={styles.commentsTitle}>Comments</Text>
-        
-        {/* Add Comment */}
-        <View style={styles.addCommentContainer}>
-          <TextInput
-            style={styles.commentInput}
-            placeholder="Add a comment..."
-            placeholderTextColor="#9CA3AF"
-            value={newComment}
-            onChangeText={setNewComment}
-            multiline
-          />
-          <TouchableOpacity 
-            style={styles.addCommentButton}
-            onPress={() => {
-              if (newComment.trim()) {
-                const comment = {
-                  id: comments.length + 1,
-                  user: 'You',
-                  text: newComment.trim(),
-                  time: 'now'
-                };
-                setComments([comment, ...comments]);
-                setNewComment('');
-              }
-            }}
-          >
-            <Text style={styles.addCommentButtonText}>Post</Text>
-          </TouchableOpacity>
+      <KeyboardAvoidingView
+        style={styles.chatContainer}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 100 : 0}
+      >
+        <View style={styles.commentsHeader}>
+          <Text style={styles.commentsTitle}>Comments ({highlight?.comments?.length || 0})</Text>
         </View>
 
-        {/* Comments List */}
-        {comments.map((comment) => (
-          <View key={comment.id} style={styles.commentItem}>
-            <View style={styles.commentHeader}>
-              <Text style={styles.commentUser}>{comment.user}</Text>
-              <Text style={styles.commentTime}>{comment.time}</Text>
+        <FlatList
+          ref={flatListRef}
+          data={highlight?.comments || []}
+          renderItem={renderComment}
+          keyExtractor={(item) => item._id}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
+          onContentSizeChange={() => {
+            if (flatListRef.current && highlight?.comments?.length > 0) {
+              setTimeout(() => {
+                flatListRef.current?.scrollToEnd({ animated: true });
+              }, 100);
+            }
+          }}
+          ListEmptyComponent={
+            <View style={styles.emptyComments}>
+              <Text style={styles.emptyCommentsText}>
+                No comments yet. Be the first to comment!
+              </Text>
             </View>
-            <Text style={styles.commentText}>{comment.text}</Text>
+          }
+          contentContainerStyle={styles.commentsList}
+        />
+
+        <View style={styles.commentInputContainer}>
+          {replyingTo && (
+            <View style={styles.replyingToContainer}>
+              <Text style={styles.replyingToText}>
+                Replying to {highlight?.comments?.find((c) => c._id === replyingTo)?.userId.username}
+              </Text>
+              <TouchableOpacity onPress={() => setReplyingTo(null)}>
+                <Ionicons name="close" size={16} color="#9CA3AF" />
+              </TouchableOpacity>
+            </View>
+          )}
+          <View style={styles.inputRow}>
+            <TextInput
+              style={styles.commentInput}
+              placeholder={replyingTo ? "Write a reply..." : "Add a comment..."}
+              placeholderTextColor="#9CA3AF"
+              value={replyingTo ? replyText : newComment}
+              onChangeText={replyingTo ? setReplyText : setNewComment}
+              multiline
+              returnKeyType="send"
+              onSubmitEditing={replyingTo ? handleSendReply : handleSendComment}
+            />
+            <TouchableOpacity
+              style={styles.commentSendButton}
+              onPress={replyingTo ? handleSendReply : handleSendComment}
+            >
+              <Ionicons name="send" size={20} color="#FFFFFF" />
+            </TouchableOpacity>
           </View>
-        ))}
-      </ScrollView>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -272,8 +456,10 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: fonts.heading,
     color: '#FFFFFF',
+    flex: 1,
+    marginHorizontal: 10,
   },
   placeholder: {
     width: 34,
@@ -281,21 +467,31 @@ const styles = StyleSheet.create({
   videoContainer: {
     width: '100%',
     height: Dimensions.get('window').height * 0.4,
-    backgroundColor: '#2D3748',
+    backgroundColor: '#000000',
+    position: 'relative',
   },
-  video: {
-    flex: 1,
+  thumbnailContainer: {
+    width: '100%',
+    height: '100%',
+    position: 'relative',
   },
-  loadingContainer: {
+  thumbnail: {
+    width: '100%',
+    height: '100%',
+  },
+  playButtonOverlay: {
     ...StyleSheet.absoluteFillObject,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#2D3748',
+    backgroundColor: 'rgba(0, 0, 0, 0.3)',
   },
-  loadingText: {
-    color: '#FFFFFF',
-    marginTop: 10,
-    fontSize: 16,
+  playButton: {
+    width: 80,
+    height: 80,
+    borderRadius: 40,
+    backgroundColor: 'rgba(255, 0, 0, 0.8)',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorContainer: {
     ...StyleSheet.absoluteFillObject,
@@ -309,6 +505,7 @@ const styles = StyleSheet.create({
     fontSize: 16,
     textAlign: 'center',
     marginBottom: 20,
+    fontFamily: fonts.body,
   },
   retryButton: {
     backgroundColor: '#3B82F6',
@@ -319,66 +516,204 @@ const styles = StyleSheet.create({
   retryButtonText: {
     color: '#FFFFFF',
     fontSize: 16,
-    fontWeight: '600',
+    fontFamily: fonts.bodySemiBold,
   },
-  commentsContainer: {
+  loadingContainer: {
     flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
+  },
+  loadingText: {
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    marginTop: 10,
+    fontSize: 16,
+  },
+  descriptionContainer: {
     padding: 16,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D3748',
+  },
+  categoryBadge: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#3B82F6',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 12,
+    marginBottom: 12,
+  },
+  categoryText: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    textTransform: 'capitalize',
+  },
+  descriptionText: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    lineHeight: 20,
+    marginBottom: 8,
+  },
+  viewsText: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+  },
+  chatContainer: {
+    flex: 1,
+    backgroundColor: '#1A202C',
+  },
+  commentsHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 15,
+    borderBottomWidth: 1,
+    borderBottomColor: '#2D3748',
   },
   commentsTitle: {
     fontSize: 18,
-    fontWeight: '600',
+    fontFamily: fonts.heading,
     color: '#FFFFFF',
-    marginBottom: 15,
   },
-  addCommentContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    alignItems: 'flex-end',
-  },
-  commentInput: {
-    flex: 1,
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    color: '#FFFFFF',
-    marginRight: 10,
-    maxHeight: 80,
-  },
-  addCommentButton: {
-    backgroundColor: '#3B82F6',
+  commentsList: {
     paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
+    paddingBottom: 10,
   },
-  addCommentButtonText: {
-    color: '#FFFFFF',
-    fontWeight: '600',
+  emptyComments: {
+    paddingVertical: 40,
+    alignItems: 'center',
+  },
+  emptyCommentsText: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
   },
   commentItem: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
+    flexDirection: 'row',
+    marginBottom: 15,
+  },
+  commentAvatar: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    marginRight: 10,
+  },
+  commentContent: {
+    flex: 1,
   },
   commentHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    alignItems: 'center',
+    marginBottom: 4,
   },
   commentUser: {
     fontSize: 14,
-    fontWeight: '600',
-    color: '#3B82F6',
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
   },
   commentTime: {
     fontSize: 12,
+    fontFamily: fonts.body,
     color: '#9CA3AF',
   },
   commentText: {
     fontSize: 14,
+    fontFamily: fonts.body,
     color: '#FFFFFF',
-    lineHeight: 20,
+    lineHeight: 18,
+    marginBottom: 6,
+  },
+  commentActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  commentLike: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginRight: 15,
+  },
+  commentLikeCount: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    marginLeft: 4,
+  },
+  replyButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  replyButtonText: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    marginLeft: 4,
+  },
+  repliesContainer: {
+    marginTop: 10,
+    marginLeft: 20,
+    borderLeftWidth: 2,
+    borderLeftColor: '#2D3748',
+    paddingLeft: 15,
+  },
+  replyItem: {
+    flexDirection: 'row',
+    marginBottom: 10,
+  },
+  replyAvatar: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    marginRight: 8,
+  },
+  replyingToContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    backgroundColor: '#2D3748',
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderRadius: 8,
+    marginBottom: 8,
+    marginHorizontal: 20,
+  },
+  replyingToText: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+  },
+  commentInputContainer: {
+    backgroundColor: '#2D3748',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    marginHorizontal: 20,
+    marginBottom: Platform.OS === 'ios' ? 20 : 10,
+    borderTopWidth: 1,
+    borderTopColor: '#374151',
+  },
+  commentInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    maxHeight: 100,
+    minHeight: 40,
+  },
+  commentSendButton: {
+    backgroundColor: '#3B82F6',
+    borderRadius: 20,
+    padding: 10,
+    marginLeft: 10,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });

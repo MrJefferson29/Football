@@ -1,335 +1,329 @@
 import Ionicons from '@expo/vector-icons/Ionicons';
-import React, { useState } from 'react';
-import { Alert, Image, KeyboardAvoidingView, Platform, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
+import React, { useEffect, useState, useRef } from 'react';
+import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { pollsAPI } from '@/utils/api';
+import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
+import ViewShot from 'react-native-view-shot';
+import * as Sharing from 'expo-sharing';
+import { captureRef } from 'react-native-view-shot';
 
 export default function GOATCompetitionScreen() {
-  const [messiVotes, setMessiVotes] = useState(65);
-  const [ronaldoVotes, setRonaldoVotes] = useState(35);
-  const [hasVoted, setHasVoted] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
-  const [showAnimation, setShowAnimation] = useState(false);
-  const [comments, setComments] = useState([
-    { id: 1, user: 'FootballFan23', text: 'Messi is the GOAT! His dribbling is unmatched', time: '2h ago', replies: [] },
-    { id: 2, user: 'CR7Forever', text: 'Ronaldo has more goals and better work ethic', time: '1h ago', replies: [] },
-    { id: 3, user: 'SoccerExpert', text: 'Both are legends, but Messi has better technical skills', time: '30m ago', replies: [] },
-  ]);
-  const [newComment, setNewComment] = useState('');
-  const [replyingTo, setReplyingTo] = useState(null);
-  const [replyText, setReplyText] = useState('');
+  const [activeTab, setActiveTab] = useState('overview');
+  const [poll, setPoll] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const viewShotRef = useRef<ViewShot>(null);
+  const [isCapturing, setIsCapturing] = useState(false);
 
-  const handleVote = async (player: 'messi' | 'ronaldo') => {
-    if (hasVoted) {
-      Alert.alert('Already Voted', 'You have already voted in this competition!');
+  useEffect(() => {
+    fetchGoatCompetitionPoll();
+  }, []);
+
+  const fetchGoatCompetitionPoll = async () => {
+    try {
+      setLoading(true);
+      const response = await pollsAPI.getPollByType('goat-competition');
+      if (response.success && response.data) {
+        setPoll(response.data);
+      } else {
+        Alert.alert('Error', 'Failed to load statistics');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to load statistics');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Calculate statistics from poll data
+  const totalVotes = poll ? (poll.option1?.votes || 0) + (poll.option2?.votes || 0) : 0;
+  const option1Percentage = poll && totalVotes > 0 
+    ? Math.round(((poll.option1?.votes || 0) / totalVotes) * 100) 
+    : 50;
+  const option2Percentage = poll && totalVotes > 0 
+    ? Math.round(((poll.option2?.votes || 0) / totalVotes) * 100) 
+    : 50;
+  const voteDifference = Math.abs((poll?.option1?.votes || 0) - (poll?.option2?.votes || 0));
+
+  // Get statistics from poll
+  const countryBreakdown = poll?.statistics?.countryBreakdown || [];
+  const ageGroupBreakdown = poll?.statistics?.ageGroupBreakdown || [];
+
+  const handleShare = async () => {
+    if (!viewShotRef.current) {
+      Alert.alert('Error', 'Unable to capture screenshot');
       return;
     }
 
-    setIsLoading(true);
-    setShowAnimation(true);
+    try {
+      setIsCapturing(true);
+      const uri = await captureRef(viewShotRef.current, {
+        format: 'png',
+        quality: 0.9,
+        result: 'tmpfile',
+      });
 
-    // Simulate API call delay
-    await new Promise(resolve => setTimeout(resolve, 1500));
-
-    if (player === 'messi') {
-      setMessiVotes(prev => prev + 1);
-      setRonaldoVotes(prev => prev - 1);
-    } else {
-      setRonaldoVotes(prev => prev + 1);
-      setMessiVotes(prev => prev - 1);
-    }
-    
-    setHasVoted(true);
-    setIsLoading(false);
-    
-    // Show success animation
-    setTimeout(() => {
-      setShowAnimation(false);
-      Alert.alert(
-        'Vote Cast! 🎉', 
-        `You voted for ${player === 'messi' ? 'Lionel Messi' : 'Cristiano Ronaldo'}! Your vote has been recorded.`,
-        [{ text: 'OK', style: 'default' }]
-      );
-    }, 500);
-  };
-
-  const messiStats = [
-    { label: 'Goals', value: '821' },
-    { label: 'Assists', value: '361' },
-    { label: 'Titles', value: '44' },
-    { label: 'Ballon d\'Or', value: '8' },
-  ];
-
-  const ronaldoStats = [
-    { label: 'Goals', value: '873' },
-    { label: 'Assists', value: '268' },
-    { label: 'Titles', value: '35' },
-    { label: 'Ballon d\'Or', value: '5' },
-  ];
-
-  const handleReply = (commentId) => {
-    setReplyingTo(commentId);
-    setReplyText('');
-  };
-
-  const submitReply = () => {
-    if (replyText.trim()) {
-      const reply = {
-        id: Date.now(),
-        user: 'You',
-        text: replyText.trim(),
-        time: 'now'
-      };
-      
-      setComments(comments.map(comment => 
-        comment.id === replyingTo 
-          ? { ...comment, replies: [...comment.replies, reply] }
-          : comment
-      ));
-      
-      setReplyText('');
-      setReplyingTo(null);
+      const isAvailable = await Sharing.isAvailableAsync();
+      if (isAvailable) {
+        await Sharing.shareAsync(uri, {
+          mimeType: 'image/png',
+          dialogTitle: 'Share Statistics',
+        });
+      } else {
+        Alert.alert('Error', 'Sharing is not available on this device');
+      }
+    } catch (error) {
+      console.error('Error sharing:', error);
+      Alert.alert('Error', 'Failed to share statistics. Please try again.');
+    } finally {
+      setIsCapturing(false);
     }
   };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Competition Statistics</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#3B82F6" />
+          <Text style={styles.loadingText}>Loading statistics...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (!poll) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>Competition Statistics</Text>
+          <View style={styles.placeholder} />
+        </View>
+        <View style={styles.loadingContainer}>
+          <Text style={styles.emptyText}>No competition poll found</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
-      <KeyboardAvoidingView 
-        style={styles.container} 
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
-
-        {/* Competition Title */}
-        <View style={styles.titleSection}>
-          <Text style={styles.competitionTitle}>Who is the GOAT?</Text>
-          <Text style={styles.competitionSubtitle}>Lionel Messi vs Cristiano Ronaldo</Text>
+      <ViewShot ref={viewShotRef} options={{ format: 'png', quality: 0.9 }} style={styles.viewShot}>
+        <View style={styles.header}>
+          <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
+            <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
+          </TouchableOpacity>
+          <Text style={styles.headerTitle}>{poll.question} Statistics</Text>
+          <TouchableOpacity 
+            onPress={handleShare} 
+            disabled={isCapturing || loading}
+            style={styles.shareButton}
+          >
+            {isCapturing ? (
+              <ActivityIndicator size="small" color="#3B82F6" />
+            ) : (
+              <Ionicons name="share-outline" size={24} color="#3B82F6" />
+            )}
+          </TouchableOpacity>
         </View>
 
-        {/* Current Results */}
-        <View style={styles.resultsSection}>
-          <Text style={styles.resultsTitle}>Current Results</Text>
-          <View style={styles.resultsContainer}>
-            <View style={styles.resultItem}>
-              <Text style={styles.resultName}>Messi</Text>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, styles.messiProgress, { width: `${messiVotes}%` }]} />
-              </View>
-              <Text style={styles.resultPercentage}>{messiVotes}%</Text>
-            </View>
-            <View style={styles.resultItem}>
-              <Text style={styles.resultName}>Ronaldo</Text>
-              <View style={styles.progressBar}>
-                <View style={[styles.progressFill, styles.ronaldoProgress, { width: `${ronaldoVotes}%` }]} />
-              </View>
-              <Text style={styles.resultPercentage}>{ronaldoVotes}%</Text>
-            </View>
-          </View>
+        <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+        {/* Tab Navigation */}
+        <View style={styles.tabContainer}>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'overview' && styles.activeTab]}
+            onPress={() => setActiveTab('overview')}
+          >
+            <Text style={[styles.tabText, activeTab === 'overview' && styles.activeTabText]}>Overview</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'demographics' && styles.activeTab]}
+            onPress={() => setActiveTab('demographics')}
+          >
+            <Text style={[styles.tabText, activeTab === 'demographics' && styles.activeTabText]}>Demographics</Text>
+          </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.tab, activeTab === 'engagement' && styles.activeTab]}
+            onPress={() => setActiveTab('engagement')}
+          >
+            <Text style={[styles.tabText, activeTab === 'engagement' && styles.activeTabText]}>Engagement</Text>
+          </TouchableOpacity>
         </View>
 
-        {/* Players Section */}
-        <View style={styles.playersSection}>
-          {/* Messi */}
-          <View style={styles.playerContainer}>
-            <TouchableOpacity 
-              style={[styles.playerCard, styles.messiCard]}
-              onPress={() => handleVote('messi')}
-              disabled={hasVoted}
-            >
-              <Image 
-                source={{ uri: 'https://img.a.transfermarkt.technology/portrait/header/28003-1671435885.jpg?lm=1' }}
-                style={styles.playerImage}
-              />
-            </TouchableOpacity>
-            <View style={styles.playerInfo}>
-              <Text style={styles.playerName}>Lionel Messi</Text>
-              <Text style={styles.playerTeam}>Inter Miami</Text>
-              <View style={styles.statsContainer}>
-                {messiStats.map((stat, index) => (
-                  <View key={index} style={styles.statItem}>
-                    <Text style={styles.statValue}>{stat.value}</Text>
-                    <Text style={styles.statLabel}>{stat.label}</Text>
-                  </View>
-                ))}
+        {activeTab === 'overview' && (
+          <>
+            {/* Player Comparison */}
+            <View style={styles.clubsSection}>
+              <View style={styles.club}>
+                <Image 
+                  source={{ uri: getDirectImageUrl(poll.option1?.image) || 'https://via.placeholder.com/80' }}
+                  style={styles.clubLogo}
+                  onError={(e) => {
+                    console.log('Image load error:', poll.option1?.image);
+                  }}
+                />
+                <Text style={styles.clubName}>{poll.option1?.name || 'Option 1'}</Text>
+                <Text style={styles.clubVotes}>{(poll.option1?.votes || 0).toLocaleString()} votes</Text>
               </View>
-              <TouchableOpacity 
-                style={[
-                  styles.voteButton, 
-                  hasVoted && styles.disabledButton,
-                  isLoading && styles.loadingButton,
-                  showAnimation && styles.animateButton
-                ]}
-                disabled={hasVoted || isLoading}
-              >
-                {isLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <Text style={styles.voteButtonText}>Voting...</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.voteButtonText}>
-                    {hasVoted ? 'Voted ✓' : 'Vote for Messi'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          {/* VS */}
-          <View style={styles.vsContainer}>
-            <Text style={styles.vsText}>VS</Text>
-          </View>
-
-          {/* Ronaldo */}
-          <View style={styles.playerContainer}>
-            <TouchableOpacity 
-              style={[styles.playerCard, styles.ronaldoCard]}
-              onPress={() => handleVote('ronaldo')}
-              disabled={hasVoted}
-            >
-              <Image 
-                source={{ uri: 'https://sportune.20minutes.fr/wp-content/uploads/2023/07/Cristiano-Ronaldo.jpg' }}
-                style={styles.playerImage}
-              />
-            </TouchableOpacity>
-            <View style={styles.playerInfo}>
-              <Text style={styles.playerName}>Cristiano Ronaldo</Text>
-              <Text style={styles.playerTeam}>Al Nassr</Text>
-              <View style={styles.statsContainer}>
-                {ronaldoStats.map((stat, index) => (
-                  <View key={index} style={styles.statItem}>
-                    <Text style={styles.statValue}>{stat.value}</Text>
-                    <Text style={styles.statLabel}>{stat.label}</Text>
-                  </View>
-                ))}
-              </View>
-              <TouchableOpacity 
-                style={[
-                  styles.voteButton, 
-                  hasVoted && styles.disabledButton,
-                  isLoading && styles.loadingButton,
-                  showAnimation && styles.animateButton
-                ]}
-                disabled={hasVoted || isLoading}
-              >
-                {isLoading ? (
-                  <View style={styles.loadingContainer}>
-                    <Text style={styles.voteButtonText}>Voting...</Text>
-                  </View>
-                ) : (
-                  <Text style={styles.voteButtonText}>
-                    {hasVoted ? 'Voted ✓' : 'Vote for Ronaldo'}
-                  </Text>
-                )}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-
-
-        {/* Share Button */}
-        <TouchableOpacity 
-          style={styles.shareButton}
-          onPress={() => Alert.alert('Share', 'Competition shared successfully!')}
-        >
-          <Ionicons name="share-outline" size={20} color="#FFFFFF" />
-          <Text style={styles.shareButtonText}>Share Competition</Text>
-        </TouchableOpacity>
-
-        {/* Comments Section */}
-        <View style={styles.commentsSection}>
-          <Text style={styles.commentsTitle}>Comments</Text>
-          
-          {/* Add Comment */}
-          <View style={styles.addCommentContainer}>
-            <TextInput
-              style={styles.commentInput}
-              placeholder="Add a comment..."
-              placeholderTextColor="#9CA3AF"
-              value={newComment}
-              onChangeText={setNewComment}
-              multiline
-            />
-            <TouchableOpacity 
-              style={styles.addCommentButton}
-              onPress={() => {
-                if (newComment.trim()) {
-                  const comment = {
-                    id: comments.length + 1,
-                    user: 'You',
-                    text: newComment.trim(),
-                    time: 'now',
-                    replies: []
-                  };
-                  setComments([comment, ...comments]);
-                  setNewComment('');
-                }
-              }}
-            >
-              <Text style={styles.addCommentButtonText}>Post</Text>
-            </TouchableOpacity>
-          </View>
-
-          {/* Comments List */}
-          {comments.map((comment) => (
-            <View key={comment.id} style={styles.commentItem}>
-              <View style={styles.commentHeader}>
-                <Text style={styles.commentUser}>{comment.user}</Text>
-                <Text style={styles.commentTime}>{comment.time}</Text>
-              </View>
-              <Text style={styles.commentText}>{comment.text}</Text>
               
-              {/* Reply Button */}
-              <TouchableOpacity 
-                style={styles.replyButton}
-                onPress={() => handleReply(comment.id)}
-              >
-                <Text style={styles.replyButtonText}>Reply</Text>
-              </TouchableOpacity>
-
-              {/* Replies */}
-              {comment.replies && comment.replies.map((reply) => (
-                <View key={reply.id} style={styles.replyItem}>
-                  <View style={styles.replyHeader}>
-                    <Text style={styles.replyUser}>{reply.user}</Text>
-                    <Text style={styles.replyTime}>{reply.time}</Text>
-                  </View>
-                  <Text style={styles.replyText}>{reply.text}</Text>
-                </View>
-              ))}
-
-              {/* Reply Input */}
-              {replyingTo === comment.id && (
-                <View style={styles.replyInputContainer}>
-                  <TextInput
-                    style={styles.replyInput}
-                    placeholder="Write a reply..."
-                    placeholderTextColor="#9CA3AF"
-                    value={replyText}
-                    onChangeText={setReplyText}
-                    multiline
-                  />
-                  <View style={styles.replyActions}>
-                    <TouchableOpacity 
-                      style={styles.cancelReplyButton}
-                      onPress={() => setReplyingTo(null)}
-                    >
-                      <Text style={styles.cancelReplyText}>Cancel</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity 
-                      style={styles.submitReplyButton}
-                      onPress={submitReply}
-                    >
-                      <Text style={styles.submitReplyText}>Reply</Text>
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              )}
+              <Text style={styles.vsText}>VS</Text>
+              
+              <View style={styles.club}>
+                <Image 
+                  source={{ uri: getDirectImageUrl(poll.option2?.image) || 'https://via.placeholder.com/80' }}
+                  style={styles.clubLogo}
+                  onError={(e) => {
+                    console.log('Image load error:', poll.option2?.image);
+                  }}
+                />
+                <Text style={styles.clubName}>{poll.option2?.name || 'Option 2'}</Text>
+                <Text style={styles.clubVotes}>{(poll.option2?.votes || 0).toLocaleString()} votes</Text>
+              </View>
             </View>
-          ))}
-        </View>
-      </ScrollView>
-      </KeyboardAvoidingView>
+
+            {/* Overall Percentage */}
+            <View style={styles.percentageSection}>
+              <View style={styles.percentageBar}>
+                <View style={[styles.percentageSegment, { backgroundColor: '#3B82F6', width: `${option1Percentage}%` }]}>
+                  <Text style={styles.percentageText}>{option1Percentage}%</Text>
+                </View>
+                <View style={[styles.percentageSegment, { backgroundColor: '#EF4444', width: `${option2Percentage}%` }]}>
+                  <Text style={styles.percentageText}>{option2Percentage}%</Text>
+                </View>
+              </View>
+            </View>
+
+            {/* Quick Stats */}
+            <View style={styles.quickStatsSection}>
+              <Text style={styles.sectionTitle}>Quick Stats</Text>
+              <View style={styles.statsGrid}>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{totalVotes.toLocaleString()}</Text>
+                  <Text style={styles.statLabel}>Total Votes</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{option1Percentage}%</Text>
+                  <Text style={styles.statLabel}>{poll.option1?.name || 'Option 1'} Lead</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{voteDifference.toLocaleString()}</Text>
+                  <Text style={styles.statLabel}>Vote Difference</Text>
+                </View>
+                <View style={styles.statCard}>
+                  <Text style={styles.statNumber}>{poll.isActive ? 'Active' : 'Ended'}</Text>
+                  <Text style={styles.statLabel}>Status</Text>
+                </View>
+              </View>
+            </View>
+          </>
+        )}
+
+        {activeTab === 'demographics' && (
+          <>
+            {/* Country Breakdown */}
+            {countryBreakdown.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Country Breakdown</Text>
+                {countryBreakdown.map((country: any, index: number) => (
+                  <View key={index} style={styles.countryItem}>
+                    <Text style={styles.countryName}>{country.country}</Text>
+                    <View style={styles.countryBars}>
+                      <View style={styles.countryBarContainer}>
+                        <View style={[styles.countryBar, { backgroundColor: '#3B82F6', width: `${country.percentage || 0}%` }]} />
+                        <Text style={styles.countryPercentage}>{country.percentage || 0}%</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Country Breakdown</Text>
+                <Text style={styles.emptyText}>No country breakdown data available</Text>
+              </View>
+            )}
+
+            {/* Age Group Breakdown */}
+            {ageGroupBreakdown.length > 0 ? (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Age Group Breakdown</Text>
+                {ageGroupBreakdown.map((ageGroup: any, index: number) => (
+                  <View key={index} style={styles.ageItem}>
+                    <Text style={styles.ageText}>{ageGroup.ageGroup}</Text>
+                    <View style={styles.ageBars}>
+                      <View style={styles.ageBarContainer}>
+                        <View style={[styles.ageBar, { backgroundColor: ageGroup.color || '#3B82F6', width: `${ageGroup.percentage || 0}%` }]} />
+                        <Text style={styles.agePercentage}>{ageGroup.percentage || 0}%</Text>
+                      </View>
+                    </View>
+                  </View>
+                ))}
+              </View>
+            ) : (
+              <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Age Group Breakdown</Text>
+                <Text style={styles.emptyText}>No age group breakdown data available</Text>
+              </View>
+            )}
+          </>
+        )}
+
+        {activeTab === 'engagement' && (
+          <>
+            {/* Poll Question */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Poll Question</Text>
+              <View style={styles.questionCard}>
+                <Text style={styles.questionText}>{poll.question}</Text>
+              </View>
+            </View>
+
+            {/* Vote Statistics */}
+            <View style={styles.section}>
+              <Text style={styles.sectionTitle}>Vote Statistics</Text>
+              <View style={styles.engagementItem}>
+                <Text style={styles.metricName}>Total Votes Cast</Text>
+                <View style={styles.metricValues}>
+                  <View style={styles.metricValue}>
+                    <Text style={styles.metricLabel}>{poll.option1?.name || 'Option 1'}</Text>
+                    <Text style={styles.metricNumber}>{(poll.option1?.votes || 0).toLocaleString()}</Text>
+                  </View>
+                  <View style={styles.metricValue}>
+                    <Text style={styles.metricLabel}>{poll.option2?.name || 'Option 2'}</Text>
+                    <Text style={styles.metricNumber}>{(poll.option2?.votes || 0).toLocaleString()}</Text>
+                  </View>
+                </View>
+              </View>
+              <View style={styles.engagementItem}>
+                <Text style={styles.metricName}>Vote Percentages</Text>
+                <View style={styles.metricValues}>
+                  <View style={styles.metricValue}>
+                    <Text style={styles.metricLabel}>{poll.option1?.name || 'Option 1'}</Text>
+                    <Text style={styles.metricNumber}>{option1Percentage}%</Text>
+                  </View>
+                  <View style={styles.metricValue}>
+                    <Text style={styles.metricLabel}>{poll.option2?.name || 'Option 2'}</Text>
+                    <Text style={styles.metricNumber}>{option2Percentage}%</Text>
+                  </View>
+                </View>
+              </View>
+            </View>
+          </>
+        )}
+
+        </ScrollView>
+      </ViewShot>
     </SafeAreaView>
   );
 }
@@ -339,8 +333,9 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: '#1A202C',
   },
-  scrollView: {
+  viewShot: {
     flex: 1,
+    backgroundColor: '#1A202C',
   },
   header: {
     flexDirection: 'row',
@@ -351,336 +346,284 @@ const styles = StyleSheet.create({
     borderBottomWidth: 1,
     borderBottomColor: '#2D3748',
   },
+  shareButton: {
+    padding: 5,
+  },
   backButton: {
     padding: 5,
   },
   headerTitle: {
     fontSize: 18,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.heading,
     color: '#FFFFFF',
+    flex: 1,
+    marginHorizontal: 10,
   },
   placeholder: {
     width: 34,
   },
-  titleSection: {
-    alignItems: 'center',
-    paddingVertical: 8,
-  },
-  competitionTitle: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginBottom: 2,
-  },
-  competitionSubtitle: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  playersSection: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    marginBottom: 10,
-    alignItems: 'flex-start',
-  },
-  playerContainer: {
+  content: {
     flex: 1,
-    alignItems: 'center',
-    marginHorizontal: 3,
-  },
-  playerCard: {
-    width: 60,
-    height: 60,
-    backgroundColor: '#2D3748',
-    borderRadius: 8,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 6,
-  },
-  playerInfo: {
-    alignItems: 'center',
-    width: '100%',
-  },
-  messiCard: {
-    borderColor: '#3B82F6',
-    borderWidth: 2,
-  },
-  ronaldoCard: {
-    borderColor: '#EF4444',
-    borderWidth: 2,
-  },
-  playerName: {
-    fontSize: 18,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginBottom: 4,
-    textAlign: 'center',
-  },
-  playerImage: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-  },
-  playerTeam: {
-    fontSize: 10,
-    color: '#9CA3AF',
-    marginBottom: 6,
-  },
-  statsContainer: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'space-between',
-    width: '100%',
-    marginBottom: 8,
-  },
-  statItem: {
-    width: '48%',
-    alignItems: 'center',
-    marginBottom: 6,
-  },
-  statValue: {
-    fontSize: 12,
-    fontFamily: fonts.bodySemiBold,
-    color: '#3B82F6',
-  },
-  statLabel: {
-    fontSize: 8,
-    color: '#9CA3AF',
-  },
-  voteButton: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-    width: '100%',
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#4A5568',
-  },
-  voteButtonText: {
-    fontSize: 10,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-  },
-  vsContainer: {
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 5,
-  },
-  vsText: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-  },
-  resultsSection: {
     paddingHorizontal: 20,
-    marginBottom: 10,
+    paddingVertical: 20,
   },
-  resultsTitle: {
-    fontSize: 12,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  resultsContainer: {
+  tabContainer: {
+    flexDirection: 'row',
     backgroundColor: '#2D3748',
+    borderRadius: 12,
+    padding: 4,
+    marginBottom: 20,
+  },
+  tab: {
+    flex: 1,
+    paddingVertical: 10,
+    paddingHorizontal: 16,
     borderRadius: 8,
-    padding: 10,
+    alignItems: 'center',
   },
-  resultItem: {
-    marginBottom: 8,
-  },
-  resultName: {
-    fontSize: 12,
-    fontWeight: '500',
-    color: '#FFFFFF',
-    marginBottom: 4,
-  },
-  progressBar: {
-    height: 6,
-    backgroundColor: '#4A5568',
-    borderRadius: 3,
-    marginBottom: 2,
-  },
-  progressFill: {
-    height: '100%',
-    borderRadius: 4,
-  },
-  messiProgress: {
+  activeTab: {
     backgroundColor: '#3B82F6',
   },
-  ronaldoProgress: {
-    backgroundColor: '#EF4444',
+  tabText: {
+    fontSize: 14,
+    fontFamily: fonts.bodyMedium,
+    color: '#9CA3AF',
   },
-  resultPercentage: {
-    fontSize: 10,
-    fontFamily: fonts.bodySemiBold,
+  activeTabText: {
     color: '#FFFFFF',
-    textAlign: 'right',
   },
-  shareButton: {
+  clubsSection: {
     flexDirection: 'row',
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#3B82F6',
-    marginHorizontal: 20,
-    paddingVertical: 16,
-    borderRadius: 12,
+    justifyContent: 'space-between',
     marginBottom: 30,
   },
-  shareButtonText: {
+  club: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  clubLogo: {
+    width: 80,
+    height: 80,
+    marginBottom: 10,
+    borderRadius: 40,
+  },
+  clubName: {
+    fontSize: 18,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginBottom: 5,
+  },
+  clubVotes: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+  },
+  vsText: {
+    fontSize: 24,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginHorizontal: 20,
+  },
+  percentageSection: {
+    marginBottom: 30,
+  },
+  percentageBar: {
+    height: 40,
+    flexDirection: 'row',
+    borderRadius: 20,
+    overflow: 'hidden',
+  },
+  percentageSegment: {
+    height: '100%',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  percentageText: {
     fontSize: 16,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
-    marginLeft: 8,
   },
-  loadingButton: {
-    backgroundColor: '#4A5568',
-    opacity: 0.7,
+  section: {
+    marginBottom: 30,
   },
-  loadingContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  animateButton: {
-    transform: [{ scale: 1.05 }],
-    shadowColor: '#3B82F6',
-    shadowOffset: { width: 0, height: 0 },
-    shadowOpacity: 0.8,
-    shadowRadius: 10,
-    elevation: 10,
-  },
-  commentsSection: {
-    marginTop: 30,
-    paddingHorizontal: 20,
-  },
-  commentsTitle: {
+  sectionTitle: {
     fontSize: 18,
-    fontFamily: fonts.bodySemiBold,
+    fontFamily: fonts.heading,
     color: '#FFFFFF',
     marginBottom: 15,
   },
-  addCommentContainer: {
-    flexDirection: 'row',
-    marginBottom: 20,
-    alignItems: 'flex-end',
+  quickStatsSection: {
+    marginBottom: 30,
   },
-  commentInput: {
-    flex: 1,
+  statsGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    justifyContent: 'space-between',
+  },
+  statCard: {
+    width: '48%',
     backgroundColor: '#2D3748',
     borderRadius: 12,
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    color: '#FFFFFF',
-    marginRight: 10,
-    maxHeight: 80,
+    padding: 15,
+    alignItems: 'center',
+    marginBottom: 10,
   },
-  addCommentButton: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    borderRadius: 12,
-  },
-  addCommentButtonText: {
-    color: '#FFFFFF',
+  statNumber: {
+    fontSize: 24,
     fontFamily: fonts.bodySemiBold,
+    color: '#3B82F6',
+    marginBottom: 4,
   },
-  commentItem: {
+  statLabel: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    textAlign: 'center',
+  },
+  countryItem: {
+    marginBottom: 15,
+  },
+  countryName: {
+    fontSize: 16,
+    fontFamily: fonts.bodyMedium,
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  countryBars: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  countryBarContainer: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  countryBar: {
+    height: 20,
+    borderRadius: 10,
+    marginBottom: 5,
+  },
+  countryPercentage: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  ageItem: {
+    marginBottom: 15,
+  },
+  ageText: {
+    fontSize: 16,
+    fontFamily: fonts.bodyMedium,
+    color: '#FFFFFF',
+    marginBottom: 8,
+  },
+  ageBars: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  ageBarContainer: {
+    flex: 1,
+    marginHorizontal: 5,
+  },
+  ageBar: {
+    height: 20,
+    borderRadius: 10,
+    marginBottom: 5,
+  },
+  agePercentage: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    textAlign: 'center',
+  },
+  engagementItem: {
     backgroundColor: '#2D3748',
     borderRadius: 12,
     padding: 15,
     marginBottom: 10,
   },
-  commentHeader: {
+  metricName: {
+    fontSize: 16,
+    fontFamily: fonts.bodyMedium,
+    color: '#FFFFFF',
+    marginBottom: 10,
+  },
+  metricValues: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    marginBottom: 8,
   },
-  commentUser: {
+  metricValue: {
+    alignItems: 'center',
+    flex: 1,
+  },
+  metricLabel: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    marginBottom: 4,
+  },
+  metricNumber: {
+    fontSize: 18,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+  },
+  historicalCard: {
+    backgroundColor: '#2D3748',
+    borderRadius: 12,
+    padding: 20,
+  },
+  historicalTitle: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginBottom: 15,
+  },
+  historicalStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+  },
+  historicalStat: {
+    alignItems: 'center',
+  },
+  historicalLabel: {
     fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+    marginBottom: 5,
+  },
+  historicalValue: {
+    fontSize: 24,
     fontFamily: fonts.bodySemiBold,
     color: '#3B82F6',
   },
-  commentTime: {
-    fontSize: 12,
-    color: '#9CA3AF',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    paddingVertical: 50,
   },
-  commentText: {
+  loadingText: {
+    marginTop: 10,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    fontSize: 16,
+  },
+  emptyText: {
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
     fontSize: 14,
+    textAlign: 'center',
+  },
+  questionCard: {
+    backgroundColor: '#2D3748',
+    borderRadius: 12,
+    padding: 20,
+  },
+  questionText: {
+    fontSize: 16,
+    fontFamily: fonts.body,
     color: '#FFFFFF',
-    lineHeight: 20,
-  },
-  replyButton: {
-    marginTop: 8,
-    alignSelf: 'flex-start',
-  },
-  replyButtonText: {
-    fontSize: 12,
-    color: '#3B82F6',
-    fontWeight: '500',
-  },
-  replyItem: {
-    backgroundColor: '#374151',
-    borderRadius: 8,
-    padding: 12,
-    marginTop: 8,
-    marginLeft: 20,
-  },
-  replyHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 6,
-  },
-  replyUser: {
-    fontSize: 12,
-    fontFamily: fonts.bodySemiBold,
-    color: '#3B82F6',
-  },
-  replyTime: {
-    fontSize: 10,
-    color: '#9CA3AF',
-  },
-  replyText: {
-    fontSize: 12,
-    color: '#FFFFFF',
-    lineHeight: 16,
-  },
-  replyInputContainer: {
-    marginTop: 8,
-    marginLeft: 20,
-  },
-  replyInput: {
-    backgroundColor: '#374151',
-    borderRadius: 8,
-    padding: 12,
-    color: '#FFFFFF',
-    fontSize: 14,
-    maxHeight: 100,
-    marginBottom: 8,
-  },
-  replyActions: {
-    flexDirection: 'row',
-    justifyContent: 'flex-end',
-    gap: 10,
-  },
-  cancelReplyButton: {
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-  },
-  cancelReplyText: {
-    color: '#9CA3AF',
-    fontSize: 12,
-  },
-  submitReplyButton: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  submitReplyText: {
-    color: '#FFFFFF',
-    fontSize: 12,
-    fontWeight: '500',
+    textAlign: 'center',
   },
 });

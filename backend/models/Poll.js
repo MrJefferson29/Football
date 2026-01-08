@@ -47,6 +47,24 @@ const pollSchema = new mongoose.Schema({
     ref: 'User',
     required: true
   },
+  scorePredictions: [{
+    userId: {
+      type: mongoose.Schema.Types.ObjectId,
+      ref: 'User'
+    },
+    homeScore: {
+      type: Number,
+      required: true
+    },
+    awayScore: {
+      type: Number,
+      required: true
+    },
+    createdAt: {
+      type: Date,
+      default: Date.now
+    }
+  }],
   statistics: {
     countryBreakdown: [{
       country: String,

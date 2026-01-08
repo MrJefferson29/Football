@@ -111,7 +111,7 @@ export default function HomeScreen() {
   )
   const limitedHighlights = filteredHighlights.slice(0, 2)
   const announcementText = 
-  "Don't forget to vote for the school council elections. Council elections are coming up and the school is in need of your participation.";
+  "Yamal told ‘real hurdle’ he must clear to emulate Messi & CR7";
 const MarqueeComponent = ({ text }: { text: string }) => {
   const { width: screenWidth } = useWindowDimensions()
   const scrollX = useRef(new Animated.Value(0)).current
@@ -205,11 +205,21 @@ const MarqueeComponent = ({ text }: { text: string }) => {
       return
     }
 
+    const homeScore = parseInt(homeGoals)
+    const awayScore = parseInt(awayGoals)
+
+    if (isNaN(homeScore) || isNaN(awayScore)) {
+      Alert.alert("Error", "Please enter valid numbers for both scores!")
+      return
+    }
+
     try {
       setIsLoading(true)
-      // For daily poll, we vote on option1 or option2 based on prediction
-      // This is a simplified version - you may want to handle score predictions differently
-      const response = await pollsAPI.votePoll(pollId, "option1")
+      // Determine which option to vote for based on scores
+      // The backend will also do this, but we can determine it here for better UX
+      const choice = homeScore > awayScore ? "option1" : homeScore < awayScore ? "option2" : "option1"
+      
+      const response = await pollsAPI.votePoll(pollId, choice, homeScore, awayScore)
       if (response.success) {
         setShowPredictionSuccess(true)
         await fetchHomeData()
@@ -381,22 +391,13 @@ const MarqueeComponent = ({ text }: { text: string }) => {
                 </View>
               </View>
 
-              <View style={styles.voteButtonsRow}>
-                <TouchableOpacity
-                  style={[styles.voteButton, styles.voteButtonHalf, isLoading && styles.loadingButton]}
-                  onPress={() => handlePollVote(dailyPoll.id, "option1")}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.voteButtonText}>Vote {dailyPoll.option1.name}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.voteButton, styles.voteButtonHalf, isLoading && styles.loadingButton]}
-                  onPress={() => handlePollVote(dailyPoll.id, "option2")}
-                  disabled={isLoading}
-                >
-                  <Text style={styles.voteButtonText}>Vote {dailyPoll.option2.name}</Text>
-                </TouchableOpacity>
-              </View>
+              <TouchableOpacity
+                style={[styles.voteButton, isLoading && styles.loadingButton, { marginTop: 10, width: '100%', alignItems: 'center' }]}
+                onPress={() => handlePrediction(dailyPoll.id)}
+                disabled={isLoading}
+              >
+                <Text style={styles.voteButtonText}>Submit Prediction</Text>
+              </TouchableOpacity>
             </View>
           </View>
         )}
@@ -508,7 +509,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
         {/* goat competition */}
         {goatCompetition && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Who is the Goat</Text>
+            <Text style={styles.sectionTitle}>{goatCompetition.question}</Text>
             <View style={styles.battleCard}>
               <View style={styles.clubsContainer}>
                 <View style={styles.club}>
@@ -606,18 +607,28 @@ const MarqueeComponent = ({ text }: { text: string }) => {
           {limitedHighlights.length > 0 ? (
             limitedHighlights.map((video: any, idx: number) => {
               // Extract video ID from YouTube URL if needed
-              const videoId = video.youtubeUrl?.includes('youtube.com') 
+              const videoId = video.youtubeUrl?.includes('youtube.com/watch?v=') 
                 ? video.youtubeUrl.split('v=')[1]?.split('&')[0] 
-                : video.youtubeUrl?.replace('https://youtu.be/', '') || video.id
+                : video.youtubeUrl?.includes('youtu.be/')
+                ? video.youtubeUrl.split('youtu.be/')[1]?.split('?')[0]
+                : video.youtubeUrl?.includes('youtube.com/live/')
+                ? video.youtubeUrl.split('youtube.com/live/')[1]?.split('?')[0]
+                : video.youtubeUrl?.includes('youtube.com/embed/')
+                ? video.youtubeUrl.split('embed/')[1]?.split('?')[0]
+                : video.youtubeUrl?.includes('youtube.com/shorts/')
+                ? video.youtubeUrl.split('shorts/')[1]?.split('?')[0]
+                : video.id || video._id
               
               return (
                 <YouTubeVideoCard
+                  id={video.id || video._id}
                   key={video.id || video._id || idx}
                   videoId={videoId}
                   title={video.title}
                   thumbnail={video.thumbnail || `https://img.youtube.com/vi/${videoId}/maxresdefault.jpg`}
                   duration={video.duration || "0:00"}
                   views={video.views ? String(video.views) : "0 views"}
+                  youtubeUrl={video.youtubeUrl}
                 />
               )
             })

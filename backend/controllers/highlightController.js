@@ -12,10 +12,41 @@ exports.getHighlights = async (req, res) => {
       query.category = category;
     }
 
-    const highlights = await Highlight.find(query).sort({ createdAt: -1 });
+    const highlights = await Highlight.find(query)
+      .populate('comments.userId', 'username avatar')
+      .populate('comments.replies.userId', 'username avatar')
+      .sort({ createdAt: -1 });
     res.status(200).json({
       success: true,
       data: highlights
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Get highlight by ID
+// @route   GET /api/highlights/:id
+// @access  Public
+exports.getHighlight = async (req, res) => {
+  try {
+    const highlight = await Highlight.findById(req.params.id)
+      .populate('comments.userId', 'username avatar')
+      .populate('comments.replies.userId', 'username avatar');
+
+    if (!highlight) {
+      return res.status(404).json({
+        success: false,
+        message: 'Highlight not found'
+      });
+    }
+
+    res.status(200).json({
+      success: true,
+      data: highlight
     });
   } catch (error) {
     res.status(500).json({
@@ -102,6 +133,130 @@ exports.deleteHighlight = async (req, res) => {
     res.status(200).json({
       success: true,
       message: 'Highlight deleted successfully'
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Add comment to highlight
+// @route   POST /api/highlights/:id/comments
+// @access  Private
+exports.addComment = async (req, res) => {
+  try {
+    const { id } = req.params;
+    const { message } = req.body;
+
+    const highlight = await Highlight.findById(id);
+    if (!highlight) {
+      return res.status(404).json({
+        success: false,
+        message: 'Highlight not found'
+      });
+    }
+
+    highlight.comments.push({
+      userId: req.user.id,
+      message
+    });
+
+    await highlight.save();
+
+    const updatedHighlight = await Highlight.findById(id)
+      .populate('comments.userId', 'username avatar')
+      .populate('comments.replies.userId', 'username avatar');
+
+    res.status(201).json({
+      success: true,
+      data: updatedHighlight
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Reply to comment
+// @route   POST /api/highlights/:id/comments/:commentId/reply
+// @access  Private
+exports.replyToComment = async (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+    const { message } = req.body;
+
+    const highlight = await Highlight.findById(id);
+    if (!highlight) {
+      return res.status(404).json({
+        success: false,
+        message: 'Highlight not found'
+      });
+    }
+
+    const comment = highlight.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Comment not found'
+      });
+    }
+
+    comment.replies.push({
+      userId: req.user.id,
+      message
+    });
+
+    await highlight.save();
+
+    const updatedHighlight = await Highlight.findById(id)
+      .populate('comments.userId', 'username avatar')
+      .populate('comments.replies.userId', 'username avatar');
+
+    res.status(201).json({
+      success: true,
+      data: updatedHighlight
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
+// @desc    Like comment
+// @route   POST /api/highlights/:id/comments/:commentId/like
+// @access  Private
+exports.likeComment = async (req, res) => {
+  try {
+    const { id, commentId } = req.params;
+
+    const highlight = await Highlight.findById(id);
+    if (!highlight) {
+      return res.status(404).json({
+        success: false,
+        message: 'Highlight not found'
+      });
+    }
+
+    const comment = highlight.comments.id(commentId);
+    if (!comment) {
+      return res.status(404).json({
+        success: false,
+        message: 'Comment not found'
+      });
+    }
+
+    comment.likes += 1;
+    await highlight.save();
+
+    res.status(200).json({
+      success: true,
+      data: highlight
     });
   } catch (error) {
     res.status(500).json({

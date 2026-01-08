@@ -1,5 +1,5 @@
 import { Ionicons } from '@expo/vector-icons';
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
     ActivityIndicator,
     Alert,
@@ -33,28 +33,59 @@ interface VotingModalProps {
 }
 
 export default function VotingModal({ visible, onClose, match, onVote }: VotingModalProps) {
-  const [selectedPrediction, setSelectedPrediction] = useState<'home' | 'draw' | 'away' | null>(null);
   const [homeScore, setHomeScore] = useState('');
   const [awayScore, setAwayScore] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [autoSelectedPrediction, setAutoSelectedPrediction] = useState<'home' | 'draw' | 'away' | null>(null);
+
+  // Auto-determine prediction based on scores
+  useEffect(() => {
+    const homeScoreNum = homeScore ? parseInt(homeScore, 10) : null;
+    const awayScoreNum = awayScore ? parseInt(awayScore, 10) : null;
+
+    if (homeScoreNum !== null && awayScoreNum !== null && !isNaN(homeScoreNum) && !isNaN(awayScoreNum)) {
+      if (homeScoreNum > awayScoreNum) {
+        setAutoSelectedPrediction('home');
+      } else if (awayScoreNum > homeScoreNum) {
+        setAutoSelectedPrediction('away');
+      } else {
+        setAutoSelectedPrediction('draw');
+      }
+    } else {
+      setAutoSelectedPrediction(null);
+    }
+  }, [homeScore, awayScore]);
+
+  // Reset scores when modal closes
+  useEffect(() => {
+    if (!visible) {
+      setHomeScore('');
+      setAwayScore('');
+      setAutoSelectedPrediction(null);
+    }
+  }, [visible]);
 
   const handleVote = async () => {
-    if (!selectedPrediction) {
-      Alert.alert('Select Prediction', 'Please select your prediction before voting.');
+    if (!autoSelectedPrediction) {
+      Alert.alert('Enter Scores', 'Please enter both scores to make your prediction.');
+      return;
+    }
+
+    const homeScoreNum = homeScore ? parseInt(homeScore, 10) : undefined;
+    const awayScoreNum = awayScore ? parseInt(awayScore, 10) : undefined;
+
+    if (homeScoreNum === undefined || awayScoreNum === undefined || isNaN(homeScoreNum) || isNaN(awayScoreNum)) {
+      Alert.alert('Invalid Scores', 'Please enter valid numbers for both scores.');
       return;
     }
 
     setIsLoading(true);
     try {
       const matchId = match._id || String(match.id);
-      const homeScoreNum = homeScore ? parseInt(homeScore, 10) : undefined;
-      const awayScoreNum = awayScore ? parseInt(awayScore, 10) : undefined;
-      
-      await onVote(matchId, selectedPrediction, homeScoreNum, awayScoreNum);
-      Alert.alert('Vote Cast! 🎉', 'Your prediction has been recorded successfully.');
-      setSelectedPrediction(null);
+      await onVote(matchId, autoSelectedPrediction, homeScoreNum, awayScoreNum);
       setHomeScore('');
       setAwayScore('');
+      setAutoSelectedPrediction(null);
       onClose();
     } catch (error) {
       Alert.alert('Error', 'Failed to cast vote. Please try again.');
@@ -139,49 +170,9 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
             </View>
           </View>
 
-           {/* Prediction Options */}
-           <View style={styles.predictionSection}>
-             <Text style={styles.predictionTitle}>Who will win?</Text>
-             <View style={styles.optionsContainer}>
-               {predictionOptions.map((option) => (
-                 <TouchableOpacity
-                   key={option.id}
-                   style={[
-                     styles.predictionOption,
-                     selectedPrediction === option.id && styles.selectedOption,
-                     { borderColor: option.color },
-                   ]}
-                   onPress={() => setSelectedPrediction(option.id)}
-                 >
-                  <View style={styles.optionContent}>
-                    {option.logo ? (
-                      <Image 
-                        source={{ uri: getDirectImageUrl(option.logo) || "https://via.placeholder.com/30" }} 
-                        style={styles.optionLogo}
-                        onError={(e) => {
-                          console.log('Image load error:', option.logo);
-                        }}
-                      />
-                    ) : (
-                      <View style={[styles.drawIcon, { backgroundColor: option.color }]}>
-                        <Text style={styles.drawText}>=</Text>
-                      </View>
-                    )}
-                    <Text style={styles.optionLabel}>{option.label}</Text>
-                  </View>
-                   {selectedPrediction === option.id && (
-                     <View style={[styles.checkmark, { backgroundColor: option.color }]}>
-                       <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                     </View>
-                   )}
-                 </TouchableOpacity>
-               ))}
-             </View>
-           </View>
-
            {/* Score Prediction */}
            <View style={styles.scorePredictionSection}>
-             <Text style={styles.scorePredictionTitle}>Predict the Score (Optional)</Text>
+             <Text style={styles.scorePredictionTitle}>Predict the Score</Text>
              <View style={styles.scoreInputContainer}>
                <View style={styles.scoreInputWrapper}>
                  <Text style={styles.scoreTeamLabel}>{match.homeTeam}</Text>
@@ -209,6 +200,48 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
              </View>
            </View>
 
+           {/* Auto-selected Prediction Display */}
+           {autoSelectedPrediction && (
+             <View style={styles.predictionSection}>
+               <Text style={styles.predictionTitle}>Your Prediction</Text>
+               <View style={styles.optionsContainer}>
+                 {predictionOptions.map((option) => (
+                   <View
+                     key={option.id}
+                     style={[
+                       styles.predictionOption,
+                       autoSelectedPrediction === option.id && styles.selectedOption,
+                       { borderColor: option.color },
+                       !autoSelectedPrediction && styles.disabledOption,
+                     ]}
+                   >
+                    <View style={styles.optionContent}>
+                      {option.logo ? (
+                        <Image 
+                          source={{ uri: getDirectImageUrl(option.logo) || "https://via.placeholder.com/30" }} 
+                          style={styles.optionLogo}
+                          onError={(e) => {
+                            console.log('Image load error:', option.logo);
+                          }}
+                        />
+                      ) : (
+                        <View style={[styles.drawIcon, { backgroundColor: option.color }]}>
+                          <Text style={styles.drawText}>=</Text>
+                        </View>
+                      )}
+                      <Text style={styles.optionLabel}>{option.label}</Text>
+                    </View>
+                     {autoSelectedPrediction === option.id && (
+                       <View style={[styles.checkmark, { backgroundColor: option.color }]}>
+                         <Ionicons name="checkmark" size={16} color="#FFFFFF" />
+                       </View>
+                     )}
+                   </View>
+                 ))}
+               </View>
+             </View>
+           )}
+
           {/* Action Buttons */}
           <View style={styles.actionButtons}>
             <TouchableOpacity
@@ -221,15 +254,15 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
             <TouchableOpacity
               style={[
                 styles.voteButton,
-                (!selectedPrediction || isLoading) && styles.disabledButton,
+                (!autoSelectedPrediction || isLoading) && styles.disabledButton,
               ]}
               onPress={handleVote}
-              disabled={!selectedPrediction || isLoading}
+              disabled={!autoSelectedPrediction || isLoading}
             >
               {isLoading ? (
                 <ActivityIndicator size="small" color="#FFFFFF" />
               ) : (
-                <Text style={styles.voteButtonText}>Cast Vote</Text>
+                <Text style={styles.voteButtonText}>Submit Prediction</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -343,6 +376,10 @@ const styles = StyleSheet.create({
   },
   selectedOption: {
     backgroundColor: '#1F2937',
+    borderWidth: 3,
+  },
+  disabledOption: {
+    opacity: 0.5,
   },
   optionContent: {
     flexDirection: 'row',

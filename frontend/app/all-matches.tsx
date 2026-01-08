@@ -22,7 +22,8 @@ export default function AllMatchesScreen() {
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      const response = await matchesAPI.getTodayMatches();
+      // Fetch all matches (not just today's)
+      const response = await matchesAPI.getMatches();
       if (response.success) {
         setAllMatches(response.data);
       }
@@ -50,10 +51,10 @@ export default function AllMatchesScreen() {
     }
   };
 
-  const handleVote = async (matchId: string, prediction: 'home' | 'draw' | 'away') => {
+  const handleVote = async (matchId: string, prediction: 'home' | 'draw' | 'away', homeScore?: number, awayScore?: number) => {
     try {
       setIsLoading(true);
-      const response = await matchesAPI.voteMatch(matchId, prediction);
+      const response = await matchesAPI.voteMatch(matchId, prediction, homeScore, awayScore);
       if (response.success) {
         Alert.alert('Vote Recorded!', 'Your prediction has been recorded successfully.');
         setShowVotingModal(false);
@@ -78,7 +79,7 @@ export default function AllMatchesScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Today's Matches</Text>
+        <Text style={styles.headerTitle}>All Matches</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -215,7 +216,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   teamName: {
-    fontSize: 16,
+    fontSize: 12,
     fontFamily: fonts.bodyMedium,
     color: '#FFFFFF',
     marginHorizontal: 10,

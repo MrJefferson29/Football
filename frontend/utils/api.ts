@@ -170,10 +170,15 @@ export const pollsAPI = {
   getPollByType: async (type: string) => {
     return apiRequest(API_ENDPOINTS.POLLS.BY_TYPE(type));
   },
-  votePoll: async (id: string, choice: 'option1' | 'option2') => {
+  votePoll: async (id: string, choice: 'option1' | 'option2', homeScore?: number, awayScore?: number) => {
+    const body: any = { choice };
+    if (homeScore !== undefined && awayScore !== undefined) {
+      body.homeScore = homeScore;
+      body.awayScore = awayScore;
+    }
     return apiRequest(API_ENDPOINTS.POLLS.VOTE(id), {
       method: 'POST',
-      body: JSON.stringify({ choice }),
+      body: JSON.stringify(body),
     });
   },
   getPollResults: async (id: string) => {
@@ -225,6 +230,26 @@ export const highlightsAPI = {
       ? `${API_ENDPOINTS.HIGHLIGHTS.BASE}?category=${category}`
       : API_ENDPOINTS.HIGHLIGHTS.BASE;
     return apiRequest(url);
+  },
+  getHighlight: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.HIGHLIGHTS.BY_ID(id));
+  },
+  addComment: async (id: string, message: string) => {
+    return apiRequest(API_ENDPOINTS.HIGHLIGHTS.COMMENTS(id), {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+  replyToComment: async (id: string, commentId: string, message: string) => {
+    return apiRequest(API_ENDPOINTS.HIGHLIGHTS.REPLY(id, commentId), {
+      method: 'POST',
+      body: JSON.stringify({ message }),
+    });
+  },
+  likeComment: async (id: string, commentId: string) => {
+    return apiRequest(API_ENDPOINTS.HIGHLIGHTS.LIKE_COMMENT(id, commentId), {
+      method: 'POST',
+    });
   },
 };
 
