@@ -10,17 +10,21 @@ import {
   TextInput,
   TouchableOpacity,
   View,
-  Platform
+  Platform,
+  Image
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
-import { predictionsAPI } from '@/utils/api';
+import { predictionsAPI, uploadAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function CreatePredictionScreen() {
   const { forumId } = useLocalSearchParams();
   const { user } = useAuth();
   const [saving, setSaving] = useState(false);
+  const [uploadingTeam1Logo, setUploadingTeam1Logo] = useState(false);
+  const [uploadingTeam2Logo, setUploadingTeam2Logo] = useState(false);
   const [formData, setFormData] = useState({
     team1Name: '',
     team1Logo: '',
@@ -35,6 +39,59 @@ export default function CreatePredictionScreen() {
     predictionType: 'match-result',
     additionalInfo: ''
   });
+
+  const pickTeamLogo = async (teamNumber: 1 | 2) => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant camera roll permissions to upload images');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadTeamLogo(result.assets[0].uri, teamNumber);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const uploadTeamLogo = async (imageUri: string, teamNumber: 1 | 2) => {
+    try {
+      if (teamNumber === 1) {
+        setUploadingTeam1Logo(true);
+      } else {
+        setUploadingTeam2Logo(true);
+      }
+
+      const response = await uploadAPI.uploadImage(imageUri, 'predictions/team-logos');
+      if (response.success && response.data?.url) {
+        if (teamNumber === 1) {
+          setFormData({ ...formData, team1Logo: response.data.url });
+        } else {
+          setFormData({ ...formData, team2Logo: response.data.url });
+        }
+        Alert.alert('Success', 'Team logo uploaded successfully!');
+      } else {
+        Alert.alert('Error', response.message || 'Failed to upload image');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to upload image');
+    } finally {
+      if (teamNumber === 1) {
+        setUploadingTeam1Logo(false);
+      } else {
+        setUploadingTeam2Logo(false);
+      }
+    }
+  };
 
   const handleSave = async () => {
     // Validation
@@ -123,14 +180,32 @@ export default function CreatePredictionScreen() {
             </View>
 
             <View style={styles.teamInputGroup}>
-              <Text style={styles.label}>Team 1 Logo URL (optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.team1Logo}
-                onChangeText={(text) => setFormData({ ...formData, team1Logo: text })}
-                placeholder="Enter team 1 logo URL"
-                placeholderTextColor="#9CA3AF"
-              />
+              <Text style={styles.label}>Team 1 Logo (optional)</Text>
+              {formData.team1Logo ? (
+                <View style={styles.logoPreviewContainer}>
+                  <Image source={{ uri: formData.team1Logo }} style={styles.logoPreview} />
+                  <TouchableOpacity
+                    style={styles.removeLogoButton}
+                    onPress={() => setFormData({ ...formData, team1Logo: '' })}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={styles.uploadLogoButton}
+                onPress={() => pickTeamLogo(1)}
+                disabled={uploadingTeam1Logo}
+              >
+                {uploadingTeam1Logo ? (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                ) : (
+                  <>
+                    <Ionicons name="image-outline" size={20} color="#3B82F6" />
+                    <Text style={styles.uploadLogoButtonText}>Upload Team 1 Logo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
 
             <View style={styles.teamInputGroup}>
@@ -145,14 +220,32 @@ export default function CreatePredictionScreen() {
             </View>
 
             <View style={styles.teamInputGroup}>
-              <Text style={styles.label}>Team 2 Logo URL (optional)</Text>
-              <TextInput
-                style={styles.input}
-                value={formData.team2Logo}
-                onChangeText={(text) => setFormData({ ...formData, team2Logo: text })}
-                placeholder="Enter team 2 logo URL"
-                placeholderTextColor="#9CA3AF"
-              />
+              <Text style={styles.label}>Team 2 Logo (optional)</Text>
+              {formData.team2Logo ? (
+                <View style={styles.logoPreviewContainer}>
+                  <Image source={{ uri: formData.team2Logo }} style={styles.logoPreview} />
+                  <TouchableOpacity
+                    style={styles.removeLogoButton}
+                    onPress={() => setFormData({ ...formData, team2Logo: '' })}
+                  >
+                    <Ionicons name="close-circle" size={20} color="#EF4444" />
+                  </TouchableOpacity>
+                </View>
+              ) : null}
+              <TouchableOpacity
+                style={styles.uploadLogoButton}
+                onPress={() => pickTeamLogo(2)}
+                disabled={uploadingTeam2Logo}
+              >
+                {uploadingTeam2Logo ? (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                ) : (
+                  <>
+                    <Ionicons name="image-outline" size={20} color="#3B82F6" />
+                    <Text style={styles.uploadLogoButtonText}>Upload Team 2 Logo</Text>
+                  </>
+                )}
+              </TouchableOpacity>
             </View>
           </View>
 
@@ -414,5 +507,34 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
+  },
+  logoPreviewContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    gap: 10,
+  },
+  logoPreview: {
+    width: 60,
+    height: 60,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+  },
+  removeLogoButton: {
+    padding: 5,
+  },
+  uploadLogoButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#374151',
+    paddingVertical: 10,
+    paddingHorizontal: 15,
+    borderRadius: 8,
+    gap: 8,
+  },
+  uploadLogoButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.bodySemiBold,
+    color: '#3B82F6',
   },
 });

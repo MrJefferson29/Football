@@ -102,6 +102,11 @@ export const API_ENDPOINTS = {
     COMMENTS: (id: string) => `${API_BASE_URL}/predictions/${id}/comments`,
     LIKE: (id: string) => `${API_BASE_URL}/predictions/${id}/like`,
   },
+  // Forum Messages
+  FORUM_MESSAGES: {
+    BASE: `${API_BASE_URL}/forum-messages`,
+    BY_FORUM: (forumId: string) => `${API_BASE_URL}/forum-messages/${forumId}`,
+  },
 };
 
 // Socket.io URL

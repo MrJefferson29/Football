@@ -43,6 +43,7 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/leaderboard', require('./routes/leaderboard'));
 app.use('/api/prediction-forums', require('./routes/predictionForums'));
 app.use('/api/predictions', require('./routes/predictions'));
+app.use('/api/forum-messages', require('./routes/forumMessages'));
 
 // Socket.io for real-time chat
 io.on('connection', (socket) => {

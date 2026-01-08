@@ -515,6 +515,19 @@ export const productsAPI = {
   },
 };
 
+// Forum Messages API
+export const forumMessagesAPI = {
+  getForumMessages: async (forumId: string) => {
+    return apiRequest(API_ENDPOINTS.FORUM_MESSAGES.BY_FORUM(forumId));
+  },
+  sendForumMessage: async (forumId: string, message: string, image?: string) => {
+    return apiRequest(API_ENDPOINTS.FORUM_MESSAGES.BASE, {
+      method: 'POST',
+      body: JSON.stringify({ forumId, message, image }),
+    });
+  },
+};
+
 // Upload API
 export const uploadAPI = {
   uploadImage: async (imageUri: string, folder?: string) => {

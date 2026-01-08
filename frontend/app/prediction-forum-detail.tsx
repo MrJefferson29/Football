@@ -8,27 +8,38 @@ import {
   ScrollView,
   StyleSheet,
   Text,
+  TextInput,
   TouchableOpacity,
   View,
-  FlatList
+  FlatList,
+  KeyboardAvoidingView,
+  Platform
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
-import { predictionForumsAPI, predictionsAPI } from '@/utils/api';
+import { predictionForumsAPI, predictionsAPI, forumMessagesAPI, uploadAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
+import * as ImagePicker from 'expo-image-picker';
 
 export default function PredictionForumDetailScreen() {
   const { id } = useLocalSearchParams();
   const { user } = useAuth();
   const [forum, setForum] = useState<any>(null);
   const [predictions, setPredictions] = useState<any[]>([]);
+  const [messages, setMessages] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [predictionsLoading, setPredictionsLoading] = useState(false);
+  const [messagesLoading, setMessagesLoading] = useState(false);
+  const [newMessage, setNewMessage] = useState('');
+  const [messageImage, setMessageImage] = useState<string | null>(null);
+  const [sendingMessage, setSendingMessage] = useState(false);
+  const [uploadingImage, setUploadingImage] = useState(false);
 
   useEffect(() => {
     if (id) {
       fetchForum();
       fetchPredictions();
+      fetchMessages();
     }
   }, [id]);
 
@@ -60,6 +71,20 @@ export default function PredictionForumDetailScreen() {
     }
   };
 
+  const fetchMessages = async () => {
+    try {
+      setMessagesLoading(true);
+      const response = await forumMessagesAPI.getForumMessages(id as string);
+      if (response.success) {
+        setMessages(response.data);
+      }
+    } catch (error: any) {
+      console.error('Failed to load messages:', error);
+    } finally {
+      setMessagesLoading(false);
+    }
+  };
+
   const handleJoinForum = async () => {
     if (!user) {
       Alert.alert('Login Required', 'Please log in to join forums');
@@ -74,6 +99,70 @@ export default function PredictionForumDetailScreen() {
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to join forum');
+    }
+  };
+
+  const pickMessageImage = async () => {
+    try {
+      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      if (status !== 'granted') {
+        Alert.alert('Permission needed', 'Please grant camera roll permissions to upload images');
+        return;
+      }
+
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [16, 9],
+        quality: 0.8,
+      });
+
+      if (!result.canceled && result.assets[0]) {
+        await uploadMessageImage(result.assets[0].uri);
+      }
+    } catch (error: any) {
+      Alert.alert('Error', 'Failed to pick image');
+    }
+  };
+
+  const uploadMessageImage = async (imageUri: string) => {
+    try {
+      setUploadingImage(true);
+      const response = await uploadAPI.uploadImage(imageUri, 'forum-messages');
+      if (response.success && response.data?.url) {
+        setMessageImage(response.data.url);
+      } else {
+        Alert.alert('Error', response.message || 'Failed to upload image');
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to upload image');
+    } finally {
+      setUploadingImage(false);
+    }
+  };
+
+  const handleSendMessage = async () => {
+    if (!newMessage.trim() && !messageImage) {
+      Alert.alert('Error', 'Please enter a message or upload an image');
+      return;
+    }
+
+    try {
+      setSendingMessage(true);
+      const response = await forumMessagesAPI.sendForumMessage(
+        id as string,
+        newMessage.trim(),
+        messageImage || undefined
+      );
+      if (response.success) {
+        setNewMessage('');
+        setMessageImage(null);
+        fetchMessages();
+      }
+    } catch (error: any) {
+      Alert.alert('Error', error.message || 'Failed to send message');
+    } finally {
+      setSendingMessage(false);
     }
   };
 
@@ -312,7 +401,117 @@ export default function PredictionForumDetailScreen() {
             />
           )}
         </View>
+
+        {/* Forum Messages Section */}
+        <View style={styles.messagesSection}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Forum Messages</Text>
+            {messagesLoading && (
+              <ActivityIndicator size="small" color="#3B82F6" />
+            )}
+          </View>
+
+          {messages.length === 0 ? (
+            <View style={styles.emptyMessages}>
+              <Ionicons name="chatbubbles-outline" size={48} color="#9CA3AF" />
+              <Text style={styles.emptyMessagesText}>No messages yet</Text>
+              {isHead && (
+                <Text style={styles.emptyMessagesSubtext}>
+                  Send a message to your forum members!
+                </Text>
+              )}
+            </View>
+          ) : (
+            <View style={styles.messagesList}>
+              {messages.map((message) => (
+                <View key={message._id} style={styles.messageCard}>
+                  <View style={styles.messageHeader}>
+                    {message.headUserId?.avatar ? (
+                      <Image 
+                        source={{ uri: message.headUserId.avatar }} 
+                        style={styles.messageAvatar} 
+                      />
+                    ) : (
+                      <View style={styles.messageAvatarPlaceholder}>
+                        <Ionicons name="person" size={16} color="#3B82F6" />
+                      </View>
+                    )}
+                    <View style={styles.messageHeaderInfo}>
+                      <Text style={styles.messageAuthor}>
+                        {message.headUserId?.username || 'Forum Head'}
+                      </Text>
+                      <Text style={styles.messageTime}>
+                        {new Date(message.createdAt).toLocaleDateString()} {new Date(message.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                      </Text>
+                    </View>
+                  </View>
+                  {message.image && (
+                    <Image source={{ uri: message.image }} style={styles.messageImage} />
+                  )}
+                  {message.message && (
+                    <Text style={styles.messageText}>{message.message}</Text>
+                  )}
+                </View>
+              ))}
+            </View>
+          )}
+        </View>
       </ScrollView>
+
+      {/* Message Form (Forum Head Only) */}
+      {isHead && (
+        <KeyboardAvoidingView
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        >
+          <View style={styles.messageFormContainer}>
+            {messageImage && (
+              <View style={styles.messageImagePreview}>
+                <Image source={{ uri: messageImage }} style={styles.previewImage} />
+                <TouchableOpacity
+                  style={styles.removeImageButton}
+                  onPress={() => setMessageImage(null)}
+                >
+                  <Ionicons name="close-circle" size={24} color="#EF4444" />
+                </TouchableOpacity>
+              </View>
+            )}
+            <View style={styles.messageInputRow}>
+              <TouchableOpacity
+                style={styles.imageButton}
+                onPress={pickMessageImage}
+                disabled={uploadingImage}
+              >
+                {uploadingImage ? (
+                  <ActivityIndicator size="small" color="#3B82F6" />
+                ) : (
+                  <Ionicons name="image-outline" size={24} color="#3B82F6" />
+                )}
+              </TouchableOpacity>
+              <TextInput
+                style={styles.messageInput}
+                value={newMessage}
+                onChangeText={setNewMessage}
+                placeholder="Send a message to your forum..."
+                placeholderTextColor="#9CA3AF"
+                multiline
+                maxLength={1000}
+              />
+              <TouchableOpacity
+                style={[styles.sendButton, (!newMessage.trim() && !messageImage) && styles.sendButtonDisabled]}
+                onPress={handleSendMessage}
+                disabled={sendingMessage || (!newMessage.trim() && !messageImage)}
+              >
+                {sendingMessage ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Ionicons name="send" size={20} color="#FFFFFF" />
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      )}
     </SafeAreaView>
   );
 }
@@ -624,5 +823,138 @@ const styles = StyleSheet.create({
     color: '#9CA3AF',
     marginTop: 5,
     textAlign: 'center',
+  },
+  messagesSection: {
+    marginTop: 30,
+    marginBottom: 20,
+  },
+  messagesList: {
+    gap: 15,
+  },
+  messageCard: {
+    backgroundColor: '#2D3748',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 10,
+  },
+  messageHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  messageAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    marginRight: 10,
+  },
+  messageAvatarPlaceholder: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#374151',
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: 10,
+  },
+  messageHeaderInfo: {
+    flex: 1,
+  },
+  messageAuthor: {
+    fontSize: 14,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginBottom: 2,
+  },
+  messageTime: {
+    fontSize: 12,
+    fontFamily: fonts.body,
+    color: '#9CA3AF',
+  },
+  messageImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 10,
+    backgroundColor: '#374151',
+  },
+  messageText: {
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    lineHeight: 20,
+  },
+  emptyMessages: {
+    alignItems: 'center',
+    paddingVertical: 40,
+  },
+  emptyMessagesText: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginTop: 15,
+  },
+  emptyMessagesSubtext: {
+    fontSize: 14,
+    color: '#9CA3AF',
+    marginTop: 5,
+    textAlign: 'center',
+  },
+  messageFormContainer: {
+    backgroundColor: '#1A202C',
+    borderTopWidth: 1,
+    borderTopColor: '#2D3748',
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+  },
+  messageImagePreview: {
+    position: 'relative',
+    marginBottom: 10,
+  },
+  previewImage: {
+    width: '100%',
+    height: 150,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: 5,
+    right: 5,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    borderRadius: 12,
+  },
+  messageInputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-end',
+    gap: 10,
+  },
+  imageButton: {
+    padding: 8,
+  },
+  messageInput: {
+    flex: 1,
+    backgroundColor: '#2D3748',
+    borderRadius: 20,
+    paddingHorizontal: 15,
+    paddingVertical: 10,
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    maxHeight: 100,
+    borderWidth: 1,
+    borderColor: '#4A5568',
+  },
+  sendButton: {
+    backgroundColor: '#3B82F6',
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  sendButtonDisabled: {
+    opacity: 0.5,
   },
 });
