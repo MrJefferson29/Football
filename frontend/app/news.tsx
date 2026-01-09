@@ -6,8 +6,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
 import { newsAPI } from '@/utils/api';
 import { getDirectImageUrl } from '@/utils/imageUtils';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 export default function NewsScreen() {
+  const { getCacheData, setCacheData } = useDataCache();
   const [newsArticles, setNewsArticles] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState('All');
@@ -15,48 +17,76 @@ export default function NewsScreen() {
   const categories = ['All', 'trending', 'breaking', 'transfer', 'match-report', 'analysis', 'other'];
 
   useEffect(() => {
-    fetchNews();
+    loadNews();
   }, []);
 
   useEffect(() => {
     if (selectedCategory !== 'All') {
-      fetchNewsByCategory();
+      loadNewsByCategory();
     } else {
-      fetchNews();
+      loadNews();
     }
   }, [selectedCategory]);
 
-  const fetchNews = async () => {
+  const loadNews = async () => {
+    // First check cache
+    const cachedData = getCacheData('news');
+    if (cachedData) {
+      setNewsArticles(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
-      setLoading(true);
       const response = await newsAPI.getNews();
       if (response.success && response.data) {
+        setCacheData('news', response.data);
         setNewsArticles(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load news');
+        if (!cachedData) {
+          Alert.alert('Error', 'Failed to load news');
+        }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load news');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load news');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchNewsByCategory = async () => {
+  const loadNewsByCategory = async () => {
+    const cacheKey = `news_${selectedCategory}`;
+    const cachedData = getCacheData(cacheKey);
+    
+    if (cachedData) {
+      setNewsArticles(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
-      setLoading(true);
       const response = await newsAPI.getNews(selectedCategory);
       if (response.success && response.data) {
+        setCacheData(cacheKey, response.data);
         setNewsArticles(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load news');
+        if (!cachedData) {
+          Alert.alert('Error', 'Failed to load news');
+        }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load news');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load news');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchNews = loadNews;
+  const fetchNewsByCategory = loadNewsByCategory;
 
   const filteredNews = selectedCategory === 'All' 
     ? newsArticles 

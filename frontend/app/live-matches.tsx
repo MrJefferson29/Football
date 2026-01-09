@@ -25,6 +25,7 @@ import { liveMatchesAPI } from '@/utils/api'
 import { useAuth } from '@/contexts/AuthContext'
 import { initSocket, socketEvents } from '@/utils/socket'
 import YoutubePlayer from 'react-native-youtube-iframe'
+import { useDataCache } from '@/contexts/DataCacheContext'
 
 const { width, height } = Dimensions.get("window")
 
@@ -74,6 +75,7 @@ interface LiveMatch {
 
 export default function LiveMatchScreen() {
   const { user } = useAuth()
+  const { getCacheData, setCacheData } = useDataCache()
   const [match, setMatch] = useState<LiveMatch | null>(null)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState("")
@@ -125,26 +127,41 @@ export default function LiveMatchScreen() {
   }, [match?._id])
 
   const fetchMatch = async () => {
+    // First check cache
+    const cachedData = getCacheData('currentLiveMatch');
+    if (cachedData) {
+      setMatch(cachedData);
+      setIsMatchLive(cachedData.isLive || cachedData.status === 'live');
+      setMatchStatus(cachedData.status || 'finished');
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
-      setLoading(true)
-      const response = await liveMatchesAPI.getCurrentMatch()
+      setLoading(true);
+      const response = await liveMatchesAPI.getCurrentMatch();
       if (response.success) {
         if (response.data) {
-          setMatch(response.data)
-          setIsMatchLive(response.data.isLive || response.data.status === 'live')
-          setMatchStatus(response.data.status || 'finished')
+          setCacheData('currentLiveMatch', response.data);
+          setMatch(response.data);
+          setIsMatchLive(response.data.isLive || response.data.status === 'live');
+          setMatchStatus(response.data.status || 'finished');
         } else {
           // No match available
-          setMatch(null)
+          setMatch(null);
         }
       } else {
-        Alert.alert('Error', response.message || 'Failed to load live match')
+        if (!cachedData) {
+          Alert.alert('Error', response.message || 'Failed to load live match');
+        }
       }
     } catch (error: any) {
-      console.error('Error fetching match:', error)
-      Alert.alert('Error', error.message || 'Failed to load live match')
+      console.error('Error fetching match:', error);
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load live match');
+      }
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
   }
 

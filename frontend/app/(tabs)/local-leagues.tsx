@@ -5,8 +5,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { matchesAPI } from '@/utils/api';
 import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 export default function LocalLeaguesScreen() {
+  const { getCacheData, setCacheData } = useDataCache();
   const [activeTab, setActiveTab] = useState<'local' | 'inter-quarter'>('local');
   const [selectedLeague, setSelectedLeague] = useState<string>('');
   const [showVotingModal, setShowVotingModal] = useState(false);
@@ -59,61 +61,96 @@ export default function LocalLeaguesScreen() {
   };
 
   useEffect(() => {
-    fetchMatches();
-    fetchInterQuarterMatches();
+    loadMatches();
+    loadInterQuarterMatches();
   }, []);
 
   useEffect(() => {
     if (selectedLeague) {
-      fetchMatchesByLeague();
+      loadMatchesByLeague();
     } else {
-      fetchMatches();
+      loadMatches();
     }
   }, [selectedLeague]);
 
   useEffect(() => {
     if (selectedInterQuarterLeague) {
-      fetchInterQuarterMatchesByLeague();
+      loadInterQuarterMatchesByLeague();
     } else {
-      fetchInterQuarterMatches();
+      loadInterQuarterMatches();
     }
   }, [selectedInterQuarterLeague]);
 
-  const fetchMatches = async () => {
-    try {
+  const loadMatches = async () => {
+    // First check cache
+    const cachedData = getCacheData('matches_local');
+    if (cachedData) {
+      setMatches(cachedData);
+      const leagueNames = (cachedData as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+      const uniqueLeagues = [...new Set(leagueNames)] as string[];
+      setLeagues(uniqueLeagues);
+      if (uniqueLeagues.length > 0 && !selectedLeague) {
+        setSelectedLeague(uniqueLeagues[0]);
+      }
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+
+    // Refresh in background
+    try {
       const response = await matchesAPI.getMatches({ leagueType: 'local' });
       if (response.success) {
+        setCacheData('matches_local', response.data);
         setMatches(response.data);
         // Extract unique leagues
         const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
-        const uniqueLeagues = [...new Set(leagueNames)];
+        const uniqueLeagues = [...new Set(leagueNames)] as string[];
         setLeagues(uniqueLeagues);
         if (uniqueLeagues.length > 0 && !selectedLeague) {
           setSelectedLeague(uniqueLeagues[0]);
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load matches');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load matches');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchMatchesByLeague = async () => {
+  const loadMatchesByLeague = async () => {
     if (!selectedLeague) return;
-    try {
+    
+    const cacheKey = `matches_local_${selectedLeague}`;
+    const cachedData = getCacheData(cacheKey);
+    
+    if (cachedData) {
+      setMatches(cachedData);
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+
+    // Refresh in background
+    try {
       const response = await matchesAPI.getMatchesByLeague(selectedLeague, { leagueType: 'local' });
       if (response.success) {
+        setCacheData(cacheKey, response.data);
         setMatches(response.data);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load matches');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load matches');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchMatches = loadMatches;
+  const fetchMatchesByLeague = loadMatchesByLeague;
 
   const filteredMatches = matches;
 
@@ -140,15 +177,15 @@ export default function LocalLeaguesScreen() {
         setShowVotingModal(false);
         setSelectedMatch(null);
         if (selectedLeague) {
-          await fetchMatchesByLeague();
+          await loadMatchesByLeague();
         } else {
-          await fetchMatches();
+          await loadMatches();
         }
         // Also refresh inter-quarter matches if we're in that section
         if (selectedInterQuarterLeague) {
-          await fetchInterQuarterMatchesByLeague();
+          await loadInterQuarterMatchesByLeague();
         } else {
-          await fetchInterQuarterMatches();
+          await loadInterQuarterMatches();
         }
       }
     } catch (error: any) {
@@ -161,11 +198,27 @@ export default function LocalLeaguesScreen() {
     setSelectedMatch(null);
   };
 
-  const fetchInterQuarterMatches = async () => {
-    try {
+  const loadInterQuarterMatches = async () => {
+    // First check cache
+    const cachedData = getCacheData('matches_inter-quarter');
+    if (cachedData) {
+      setInterQuarterMatches(cachedData);
+      const leagueNames = (cachedData as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+      const uniqueLeagues: string[] = Array.from(new Set(leagueNames));
+      setInterQuarterLeagues(uniqueLeagues);
+      if (uniqueLeagues.length > 0 && !selectedInterQuarterLeague) {
+        setSelectedInterQuarterLeague(uniqueLeagues[0]);
+      }
+      setLoadingInterQuarter(false);
+    } else {
       setLoadingInterQuarter(true);
+    }
+
+    // Refresh in background
+    try {
       const response = await matchesAPI.getMatches({ leagueType: 'inter-quarter' });
       if (response.success) {
+        setCacheData('matches_inter-quarter', response.data);
         setInterQuarterMatches(response.data);
         // Extract unique leagues
         const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
@@ -176,26 +229,45 @@ export default function LocalLeaguesScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load inter-quarter matches');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load inter-quarter matches');
+      }
     } finally {
       setLoadingInterQuarter(false);
     }
   };
 
-  const fetchInterQuarterMatchesByLeague = async () => {
+  const loadInterQuarterMatchesByLeague = async () => {
     if (!selectedInterQuarterLeague) return;
-    try {
+    
+    const cacheKey = `matches_inter-quarter_${selectedInterQuarterLeague}`;
+    const cachedData = getCacheData(cacheKey);
+    
+    if (cachedData) {
+      setInterQuarterMatches(cachedData);
+      setLoadingInterQuarter(false);
+    } else {
       setLoadingInterQuarter(true);
+    }
+
+    // Refresh in background
+    try {
       const response = await matchesAPI.getMatchesByLeague(selectedInterQuarterLeague, { leagueType: 'inter-quarter' });
       if (response.success) {
+        setCacheData(cacheKey, response.data);
         setInterQuarterMatches(response.data);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load inter-quarter matches');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load inter-quarter matches');
+      }
     } finally {
       setLoadingInterQuarter(false);
     }
   };
+
+  const fetchInterQuarterMatches = loadInterQuarterMatches;
+  const fetchInterQuarterMatchesByLeague = loadInterQuarterMatchesByLeague;
 
   return (
     <SafeAreaView style={styles.container}>

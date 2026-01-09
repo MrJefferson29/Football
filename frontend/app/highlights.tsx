@@ -6,37 +6,53 @@ import { ActivityIndicator, Alert, ScrollView, StyleSheet, Text, TouchableOpacit
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { highlightsAPI } from '@/utils/api';
 import { fonts } from '@/utils/typography';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 export default function HighlightsScreen() {
+  const { getCacheData, setCacheData } = useDataCache();
   const [highlights, setHighlights] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
   const [selectedCategory, setSelectedCategory] = useState<string>('All');
 
   useEffect(() => {
-    fetchHighlights();
+    loadHighlights();
   }, []);
 
-  const fetchHighlights = async () => {
+  const loadHighlights = async () => {
+    // First check cache
+    const cachedData = getCacheData('highlights');
+    if (cachedData) {
+      setHighlights(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
-      setLoading(true);
       console.log('Fetching highlights...');
       const response = await highlightsAPI.getHighlights();
       console.log('Highlights response:', response);
       if (response.success) {
         console.log('Highlights data:', response.data);
         console.log('Number of highlights:', response.data?.length || 0);
+        setCacheData('highlights', response.data || []);
         setHighlights(response.data || []);
       } else {
         console.warn('Highlights fetch failed:', response.message);
-        Alert.alert('Error', response.message || 'Failed to load highlights');
+        if (!cachedData) {
+          Alert.alert('Error', response.message || 'Failed to load highlights');
+        }
       }
     } catch (error: any) {
       console.error('Error fetching highlights:', error);
-      Alert.alert('Error', error.message || 'Failed to load highlights');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load highlights');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchHighlights = loadHighlights;
 
   const categories = ['All', ...Array.from(new Set((highlights || []).map((h: any) => h.category).filter(Boolean)))];
   const filteredHighlights = (highlights || []).filter((h: any) => {

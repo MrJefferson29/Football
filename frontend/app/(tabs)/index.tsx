@@ -7,14 +7,16 @@ import { router } from "expo-router"
 import { useEffect, useState, useRef } from "react"
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ToastAndroid, Easing, Animated, useWindowDimensions } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
-import { homeAPI, pollsAPI, matchesAPI, preloadAPI } from "@/utils/api"
+import { homeAPI, pollsAPI, matchesAPI, preloadAPI, highlightsAPI, newsAPI, liveMatchesAPI, fanGroupsAPI, statisticsAPI, productsAPI, predictionForumsAPI, chatAPI } from "@/utils/api"
 import { getDirectImageUrl } from "@/utils/imageUtils"
 import { fonts } from "@/utils/typography"
 import { LinearGradient } from "expo-linear-gradient"
 import { useAuth } from "@/contexts/AuthContext"
+import { useDataCache } from "@/contexts/DataCacheContext"
 
 export default function HomeScreen() {
   const { user } = useAuth()
+  const { setCacheData, setPreloading } = useDataCache()
   const [homeData, setHomeData] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [messiVotes, setMessiVotes] = useState(50)
@@ -31,13 +33,193 @@ export default function HomeScreen() {
   // Fetch all home data and preload all API routes on mount
   useEffect(() => {
     fetchHomeData()
-    // Preload all API endpoints in the background
-    preloadAPI.preloadAll().then((results) => {
-      console.log('API preload completed:', Object.keys(results).length, 'endpoints loaded');
-    }).catch((error) => {
-      console.warn('API preload error:', error);
-    })
+    preloadAllData()
   }, [])
+
+  // Preload all data for all screens
+  const preloadAllData = async () => {
+    try {
+      setPreloading(true)
+      
+      // Preload all data in parallel
+      const preloadPromises = [
+        // Home data (already fetched in fetchHomeData, but cache it)
+        homeAPI.getHomeData()
+          .then(data => {
+            if (data.success) setCacheData('homeData', data.data)
+          })
+          .catch(err => console.warn('Home data preload error:', err)),
+
+        // Matches - International
+        matchesAPI.getMatches({ leagueType: 'international' })
+          .then(data => {
+            if (data.success) setCacheData('matches_international', data.data)
+          })
+          .catch(err => console.warn('International matches preload error:', err)),
+
+        // Matches - Local
+        matchesAPI.getMatches({ leagueType: 'local' })
+          .then(data => {
+            if (data.success) setCacheData('matches_local', data.data)
+          })
+          .catch(err => console.warn('Local matches preload error:', err)),
+
+        // Matches - Inter-Quarter
+        matchesAPI.getMatches({ leagueType: 'inter-quarter' })
+          .then(data => {
+            if (data.success) setCacheData('matches_inter-quarter', data.data)
+          })
+          .catch(err => console.warn('Inter-quarter matches preload error:', err)),
+
+        // Today's matches - International
+        matchesAPI.getTodayMatches({ leagueType: 'international' })
+          .then(data => {
+            if (data.success) setCacheData('todayMatches_international', data.data)
+          })
+          .catch(err => console.warn('Today matches international preload error:', err)),
+
+        // Today's matches - Local
+        matchesAPI.getTodayMatches({ leagueType: 'local' })
+          .then(data => {
+            if (data.success) setCacheData('todayMatches_local', data.data)
+          })
+          .catch(err => console.warn('Today matches local preload error:', err)),
+
+        // Today's matches - Inter-Quarter
+        matchesAPI.getTodayMatches({ leagueType: 'inter-quarter' })
+          .then(data => {
+            if (data.success) setCacheData('todayMatches_inter-quarter', data.data)
+          })
+          .catch(err => console.warn('Today matches inter-quarter preload error:', err)),
+
+        // Highlights
+        highlightsAPI.getHighlights()
+          .then(data => {
+            if (data.success) setCacheData('highlights', data.data || [])
+          })
+          .catch(err => console.warn('Highlights preload error:', err)),
+
+        // News
+        newsAPI.getNews()
+          .then(data => {
+            if (data.success) setCacheData('news', data.data || [])
+          })
+          .catch(err => console.warn('News preload error:', err)),
+
+        // Trending News
+        newsAPI.getTrendingNews()
+          .then(data => {
+            if (data.success) setCacheData('trendingNews', data.data || [])
+          })
+          .catch(err => console.warn('Trending news preload error:', err)),
+
+        // Live Matches
+        liveMatchesAPI.getLiveMatches()
+          .then(data => {
+            if (data.success) setCacheData('liveMatches', data.data || [])
+          })
+          .catch(err => console.warn('Live matches preload error:', err)),
+
+        // Current Live Match
+        liveMatchesAPI.getCurrentMatch()
+          .then(data => {
+            if (data.success) setCacheData('currentLiveMatch', data.data)
+          })
+          .catch(err => console.warn('Current live match preload error:', err)),
+
+        // Fan Groups
+        fanGroupsAPI.getFanGroups()
+          .then(data => {
+            if (data.success) setCacheData('fanGroups', data.data || [])
+          })
+          .catch(err => console.warn('Fan groups preload error:', err)),
+
+        // Prediction Forums
+        predictionForumsAPI.getPredictionForums()
+          .then(data => {
+            if (data.success) setCacheData('predictionForums', data.data || [])
+          })
+          .catch(err => console.warn('Prediction forums preload error:', err)),
+
+        // Statistics
+        statisticsAPI.getStatistics()
+          .then(data => {
+            if (data.success) setCacheData('statistics', data.data)
+          })
+          .catch(err => console.warn('Statistics preload error:', err)),
+
+        // Products - Featured
+        productsAPI.getProducts({ featured: true })
+          .then(data => {
+            if (data.success) setCacheData('products_featured', data.data || [])
+          })
+          .catch(err => console.warn('Featured products preload error:', err)),
+
+        // Products - Trending
+        productsAPI.getProducts({ trending: true })
+          .then(data => {
+            if (data.success) setCacheData('products_trending', data.data || [])
+          })
+          .catch(err => console.warn('Trending products preload error:', err)),
+
+        // Products - All
+        productsAPI.getProducts()
+          .then(data => {
+            if (data.success) setCacheData('products_all', data.data || [])
+          })
+          .catch(err => console.warn('All products preload error:', err)),
+
+        // Polls - All
+        pollsAPI.getPolls()
+          .then(data => {
+            if (data.success) setCacheData('polls', data.data || [])
+          })
+          .catch(err => console.warn('Polls preload error:', err)),
+
+        // Poll - Daily Poll
+        pollsAPI.getPollByType('daily-poll')
+          .then(data => {
+            if (data.success) setCacheData('poll_daily', data.data)
+          })
+          .catch(err => console.warn('Daily poll preload error:', err)),
+
+        // Poll - Club Battle
+        pollsAPI.getPollByType('club-battle')
+          .then(data => {
+            if (data.success) setCacheData('poll_club-battle', data.data)
+          })
+          .catch(err => console.warn('Club battle poll preload error:', err)),
+
+        // Poll - GOAT Competition
+        pollsAPI.getPollByType('goat-competition')
+          .then(data => {
+            if (data.success) setCacheData('poll_goat-competition', data.data)
+          })
+          .catch(err => console.warn('GOAT competition poll preload error:', err)),
+      ]
+
+      // Add user-specific data if authenticated
+      if (user) {
+        // Chat Messages
+        preloadPromises.push(
+          chatAPI.getMessages()
+            .then(data => {
+              if (data.success) setCacheData('chatMessages', data.data || [])
+            })
+            .catch(err => console.warn('Chat messages preload error:', err))
+        )
+      }
+
+      // Wait for all preloads to complete
+      await Promise.allSettled(preloadPromises)
+      
+      console.log('✅ All data preloaded successfully')
+    } catch (error) {
+      console.error('Error during preload:', error)
+    } finally {
+      setPreloading(false)
+    }
+  }
 
   const fetchHomeData = async () => {
     try {

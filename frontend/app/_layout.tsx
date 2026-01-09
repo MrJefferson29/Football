@@ -8,6 +8,7 @@ import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
+import { DataCacheProvider } from '@/contexts/DataCacheContext';
 
 export {
   // Catch any errors thrown by the Layout component.
@@ -53,7 +54,9 @@ export default function RootLayout() {
 
   return (
     <AuthProvider>
-      <RootLayoutNav />
+      <DataCacheProvider>
+        <RootLayoutNav />
+      </DataCacheProvider>
     </AuthProvider>
   );
 }

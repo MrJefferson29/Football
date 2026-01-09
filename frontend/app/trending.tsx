@@ -6,30 +6,46 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { newsAPI } from '@/utils/api';
 import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 export default function TrendingScreen() {
+  const { getCacheData, setCacheData } = useDataCache();
   const [trendingContent, setTrendingContent] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchTrendingNews();
+    loadTrendingNews();
   }, []);
 
-  const fetchTrendingNews = async () => {
+  const loadTrendingNews = async () => {
+    // First check cache
+    const cachedData = getCacheData('trendingNews');
+    if (cachedData) {
+      setTrendingContent(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
-      setLoading(true);
       const response = await newsAPI.getTrendingNews();
       if (response.success && response.data) {
+        setCacheData('trendingNews', response.data);
         setTrendingContent(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load trending content');
+        if (!cachedData) {
+          Alert.alert('Error', 'Failed to load trending content');
+        }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load trending content');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load trending content');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchTrendingNews = loadTrendingNews;
 
   const handleContentPress = (content: any) => {
     const videoUrl = content.youtubeUrl || content.videoUrl;

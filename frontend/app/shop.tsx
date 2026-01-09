@@ -17,6 +17,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
 import { productsAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 interface Product {
   _id: string;
@@ -38,6 +39,7 @@ interface Product {
 
 export default function ShopScreen() {
   const { user } = useAuth();
+  const { getCacheData, setCacheData } = useDataCache();
   const [products, setProducts] = useState<Product[]>([]);
   const [filteredProducts, setFilteredProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -49,29 +51,58 @@ export default function ShopScreen() {
   const categories = ['all', 'jersey', 'shoes', 'accessories', 'equipment', 'merchandise', 'other'];
 
   useEffect(() => {
-    fetchProducts();
+    loadInitialProducts();
   }, []);
+
+  const loadInitialProducts = async () => {
+    // First check cache for all products
+    const cachedData = getCacheData('products_all');
+    if (cachedData) {
+      setProducts(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background (no await needed - fire and forget)
+    fetchProducts().catch(err => console.error('Error refreshing products:', err));
+  };
 
   useEffect(() => {
     applyFilters();
   }, [products, searchQuery, selectedCategory, sortBy]);
 
   const fetchProducts = async () => {
+    const filters: any = {};
+    if (selectedCategory !== 'all') filters.category = selectedCategory;
+    if (sortBy) filters.sort = sortBy;
+
+    const cacheKey = selectedCategory === 'all' && !sortBy 
+      ? 'products_all' 
+      : `products_${selectedCategory}_${sortBy || 'default'}`;
+    
+    // First check cache
+    const cachedData = getCacheData(cacheKey);
+    if (cachedData) {
+      setProducts(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
       setLoading(true);
-      const filters: any = {};
-      if (selectedCategory !== 'all') filters.category = selectedCategory;
-      if (sortBy) filters.sort = sortBy;
-
       const response = await productsAPI.getProducts(filters);
       if (response.success && response.data) {
+        setCacheData(cacheKey, response.data);
         setProducts(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load products');
+        if (!cachedData) {
+          Alert.alert('Error', 'Failed to load products');
+        }
       }
     } catch (error: any) {
       console.error('Error fetching products:', error);
-      Alert.alert('Error', error.message || 'Failed to load products');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load products');
+      }
     } finally {
       setLoading(false);
     }

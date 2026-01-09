@@ -7,8 +7,10 @@ import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 export default function MatchesScreen() {
+  const { getCacheData, setCacheData, isCached } = useDataCache();
   const [selectedLeague, setSelectedLeague] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -68,22 +70,38 @@ export default function MatchesScreen() {
   };
 
   useEffect(() => {
-    fetchMatches();
+    loadMatches();
   }, []);
 
   useEffect(() => {
     if (selectedLeague) {
-      fetchMatchesByLeague();
+      loadMatchesByLeague();
     } else {
-      fetchMatches();
+      loadMatches();
     }
   }, [selectedLeague]);
 
-  const fetchMatches = async () => {
-    try {
+  const loadMatches = async () => {
+    // First check cache
+    const cachedData = getCacheData('matches_international');
+    if (cachedData) {
+      setMatches(cachedData);
+      const leagueNames = (cachedData as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+      const uniqueLeagues = [...new Set(leagueNames)] as string[];
+      setLeagues(uniqueLeagues);
+      if (uniqueLeagues.length > 0 && !selectedLeague) {
+        setSelectedLeague(uniqueLeagues[0]);
+      }
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+
+    // Refresh in background
+    try {
       const response = await matchesAPI.getMatches({ leagueType: 'international' });
       if (response.success) {
+        setCacheData('matches_international', response.data);
         setMatches(response.data);
         // Extract unique leagues
         const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
@@ -94,26 +112,45 @@ export default function MatchesScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load matches');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load matches');
+      }
     } finally {
       setLoading(false);
     }
   };
 
-  const fetchMatchesByLeague = async () => {
+  const loadMatchesByLeague = async () => {
     if (!selectedLeague) return;
-    try {
+    
+    const cacheKey = `matches_international_${selectedLeague}`;
+    const cachedData = getCacheData(cacheKey);
+    
+    if (cachedData) {
+      setMatches(cachedData);
+      setLoading(false);
+    } else {
       setLoading(true);
+    }
+
+    // Refresh in background
+    try {
       const response = await matchesAPI.getMatchesByLeague(selectedLeague, { leagueType: 'international' });
       if (response.success) {
+        setCacheData(cacheKey, response.data);
         setMatches(response.data);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load matches');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load matches');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchMatches = loadMatches;
+  const fetchMatchesByLeague = loadMatchesByLeague;
 
   const filteredFixtures = matches;
 

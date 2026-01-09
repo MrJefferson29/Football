@@ -21,6 +21,7 @@ import { fonts } from '@/utils/typography';
 import { chatAPI, uploadAPI, fanGroupsAPI } from '@/utils/api';
 import { initSocket, socketEvents, disconnectSocket } from '@/utils/socket';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 interface ChatMessage {
   _id: string;
@@ -57,29 +58,44 @@ interface FanGroup {
 
 function FanGroupsTab() {
   const { user } = useAuth();
+  const { getCacheData, setCacheData } = useDataCache();
   const [fanGroups, setFanGroups] = useState<FanGroup[]>([]);
   const [isLoading, setIsLoading] = useState(false);
 
   useEffect(() => {
-    fetchFanGroups();
+    loadFanGroups();
   }, []);
 
-  const fetchFanGroups = async () => {
+  const loadFanGroups = async () => {
+    // First check cache
+    const cachedData = getCacheData('fanGroups');
+    if (cachedData) {
+      setFanGroups(cachedData);
+      setIsLoading(false);
+    }
+
+    // Refresh in background
     try {
-      setIsLoading(true);
       const response = await fanGroupsAPI.getFanGroups();
       if (response.success && response.data) {
+        setCacheData('fanGroups', response.data);
         setFanGroups(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load fan groups');
+        if (!cachedData) {
+          Alert.alert('Error', 'Failed to load fan groups');
+        }
       }
     } catch (error: any) {
       console.error('Error fetching fan groups:', error);
-      Alert.alert('Error', error.message || 'Failed to load fan groups');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load fan groups');
+      }
     } finally {
       setIsLoading(false);
     }
   };
+
+  const fetchFanGroups = loadFanGroups;
 
   const handleJoinGroup = async (groupId: string) => {
     try {
@@ -184,6 +200,7 @@ function FanGroupsTab() {
 
 export default function CommunityScreen() {
   const { user } = useAuth();
+  const { getCacheData, setCacheData } = useDataCache();
   const [activeTab, setActiveTab] = useState('Live Chat');
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [newMessage, setNewMessage] = useState('');
@@ -241,21 +258,42 @@ export default function CommunityScreen() {
   };
 
   const fetchMessages = async () => {
+    // First check cache (only if user is authenticated)
+    if (user) {
+      const cachedData = getCacheData('chatMessages');
+      if (cachedData) {
+        setMessages(cachedData);
+        setIsLoading(false);
+        // Auto-scroll to bottom after loading
+        setTimeout(() => {
+          scrollViewRef.current?.scrollToEnd({ animated: false });
+        }, 100);
+      }
+    }
+
+    // Refresh in background
     try {
       setIsLoading(true);
       const response = await chatAPI.getMessages();
       if (response.success && response.data) {
+        if (user) {
+          setCacheData('chatMessages', response.data);
+        }
         setMessages(response.data);
         // Auto-scroll to bottom after loading
         setTimeout(() => {
           scrollViewRef.current?.scrollToEnd({ animated: false });
         }, 100);
       } else {
-        Alert.alert('Error', 'Failed to load messages');
+        if (!getCacheData('chatMessages')) {
+          Alert.alert('Error', 'Failed to load messages');
+        }
       }
     } catch (error: any) {
       console.error('Error fetching messages:', error);
-      Alert.alert('Error', error.message || 'Failed to load messages');
+      if (!getCacheData('chatMessages')) {
+        Alert.alert('Error', error.message || 'Failed to load messages');
+      }
     } finally {
       setIsLoading(false);
     }

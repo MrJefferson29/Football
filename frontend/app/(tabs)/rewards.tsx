@@ -6,29 +6,43 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
 import { predictionForumsAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 export default function RewardsScreen() {
   const { user } = useAuth();
+  const { getCacheData, setCacheData } = useDataCache();
   const [forums, setForums] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    fetchForums();
+    loadForums();
   }, []);
 
-  const fetchForums = async () => {
+  const loadForums = async () => {
+    // First check cache
+    const cachedData = getCacheData('predictionForums');
+    if (cachedData) {
+      setForums(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
-      setLoading(true);
       const response = await predictionForumsAPI.getPredictionForums();
       if (response.success) {
+        setCacheData('predictionForums', response.data);
         setForums(response.data);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load prediction forums');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load prediction forums');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchForums = loadForums;
 
   const handleJoinForum = async (forum: any) => {
     if (!user) {

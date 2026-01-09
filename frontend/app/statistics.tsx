@@ -8,8 +8,10 @@ import { statisticsAPI } from '@/utils/api';
 import ViewShot from 'react-native-view-shot';
 import * as Sharing from 'expo-sharing';
 import { captureRef } from 'react-native-view-shot';
+import { useDataCache } from '@/contexts/DataCacheContext';
 
 export default function StatisticsScreen() {
+  const { getCacheData, setCacheData } = useDataCache();
   const [activeTab, setActiveTab] = useState('overview');
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState<any>(null);
@@ -17,28 +19,43 @@ export default function StatisticsScreen() {
   const [isCapturing, setIsCapturing] = useState(false);
 
   useEffect(() => {
-    fetchStatistics();
+    loadStatistics();
     // Refresh every 30 seconds
-    const interval = setInterval(fetchStatistics, 30000);
+    const interval = setInterval(loadStatistics, 30000);
     return () => clearInterval(interval);
   }, []);
 
-  const fetchStatistics = async () => {
+  const loadStatistics = async () => {
+    // First check cache
+    const cachedData = getCacheData('statistics');
+    if (cachedData) {
+      setStats(cachedData);
+      setLoading(false);
+    }
+
+    // Refresh in background
     try {
       setLoading(true);
       const response = await statisticsAPI.getStatistics();
       if (response.success && response.data) {
+        setCacheData('statistics', response.data);
         setStats(response.data);
       } else {
-        Alert.alert('Error', 'Failed to load statistics');
+        if (!cachedData) {
+          Alert.alert('Error', 'Failed to load statistics');
+        }
       }
     } catch (error: any) {
       console.error('Error fetching statistics:', error);
-      Alert.alert('Error', error.message || 'Failed to load statistics');
+      if (!cachedData) {
+        Alert.alert('Error', error.message || 'Failed to load statistics');
+      }
     } finally {
       setLoading(false);
     }
   };
+
+  const fetchStatistics = loadStatistics;
 
   const handleShare = async () => {
     if (!viewShotRef.current) {
