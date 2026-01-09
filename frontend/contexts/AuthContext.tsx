@@ -50,39 +50,72 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
 
   const checkAuth = async () => {
     try {
-      setLoading(true);
+      // First, optimistically load user from storage for immediate UI
       const token = await storage.getToken();
       const storedUser = await storage.getUser();
 
       if (token && storedUser) {
-        // Verify token is still valid
-        try {
-          const response = await authAPI.getMe();
-          if (response.success && response.data) {
-            // Ensure user has _id field
-            const userData = {
-              ...response.data,
-              _id: response.data._id || response.data.id,
-            };
-            setUser(userData);
-            await storage.setUser(userData);
-          } else {
-            // Token invalid, clear storage
-            await storage.clearAuth();
-            setUser(null);
+        // Optimistically set user immediately for faster UI
+        const userData = {
+          ...storedUser,
+          _id: storedUser._id || storedUser.id,
+        };
+        setUser(userData);
+        setLoading(false); // Allow UI to render immediately
+
+        // Verify token in background (non-blocking) with timeout
+        const verifyToken = async () => {
+          try {
+            // Add timeout to prevent hanging
+            const timeoutPromise = new Promise((_, reject) =>
+              setTimeout(() => reject(new Error('Token verification timeout')), 5000)
+            );
+
+            const response = await Promise.race([
+              authAPI.getMe(),
+              timeoutPromise,
+            ]) as any;
+
+            if (response?.success && response?.data) {
+              // Token is valid, update with fresh data
+              const freshUserData = {
+                ...response.data,
+                _id: response.data._id || response.data.id,
+              };
+              setUser(freshUserData);
+              await storage.setUser(freshUserData);
+            } else {
+              // Token invalid, clear storage
+              await storage.clearAuth();
+              setUser(null);
+            }
+          } catch (error: any) {
+            // Token invalid, expired, or network error - clear auth but don't block UI
+            if (error?.message?.includes('timeout')) {
+              console.warn('Token verification timed out - using cached user');
+              // Don't clear auth on timeout - user might just have poor connection
+              // Token will be verified on next API call
+            } else if (error?.message?.includes('401') || error?.message?.includes('expired')) {
+              console.warn('Token expired or invalid - clearing auth');
+              await storage.clearAuth();
+              setUser(null);
+            } else {
+              console.warn('Token verification failed:', error?.message || error);
+              // Don't clear auth on network errors - might be temporary
+            }
           }
-        } catch (error) {
-          // Token invalid or expired
-          await storage.clearAuth();
-          setUser(null);
-        }
+        };
+
+        // Verify in background without blocking
+        verifyToken();
       } else {
+        // No token or user in storage
         setUser(null);
+        setLoading(false);
       }
     } catch (error) {
       console.error('Auth check error:', error);
       setUser(null);
-    } finally {
       setLoading(false);
     }
   };

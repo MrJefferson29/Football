@@ -6,7 +6,8 @@
       }
     },
     "android": {
-      "package": "com.j.f.s.n.football"
+      "package": "com.j.f.s.n.football",
+      "softwareKeyboardLayoutMode": "resize"
     }
   }
 }

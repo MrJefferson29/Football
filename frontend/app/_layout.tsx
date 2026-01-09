@@ -3,7 +3,8 @@ import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native
 import { useFonts } from 'expo-font';
 import { Stack, useRouter, useSegments } from 'expo-router';
 import * as SplashScreen from 'expo-splash-screen';
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
+import { View, ActivityIndicator, StyleSheet } from 'react-native';
 import 'react-native-reanimated';
 
 import { useColorScheme } from '@/components/useColorScheme';
@@ -66,22 +67,49 @@ function RootLayoutNav() {
   const { isAuthenticated, loading } = useAuth();
   const segments = useSegments();
   const router = useRouter();
+  const [initialAuthCheck, setInitialAuthCheck] = useState(false);
 
   useEffect(() => {
-    if (loading) return;
-
-    const inAuthGroup = segments[0] === '(tabs)';
-    const isAuthPage = segments[0] === 'login' || segments[0] === 'register';
-
-    if (!isAuthenticated && inAuthGroup) {
-      // User is not authenticated but trying to access protected routes
-      router.replace('/login');
-    } else if (isAuthenticated && isAuthPage) {
-      // User is authenticated but on login/register page - redirect to home
-      router.replace('/(tabs)');
+    // Wait for auth check to complete
+    if (loading) {
+      return;
     }
-    // Allow authenticated users to access other routes (poll-results, all-matches, etc.)
-  }, [isAuthenticated, loading, segments]);
+
+    // Small delay to ensure router and segments are ready
+    const timer = setTimeout(() => {
+      // Mark that initial auth check is complete
+      if (!initialAuthCheck) {
+        setInitialAuthCheck(true);
+      }
+
+      const currentSegment = segments[0];
+      const inAuthGroup = currentSegment === '(tabs)';
+      const isAuthPage = currentSegment === 'login' || currentSegment === 'register';
+
+      // Handle navigation based on auth state
+      // Only redirect if user is on wrong page for their auth state
+      if (isAuthenticated && isAuthPage) {
+        // User is authenticated but on login/register page - redirect to home
+        router.replace('/(tabs)');
+      } else if (!isAuthenticated && inAuthGroup) {
+        // User is not authenticated but trying to access protected routes
+        router.replace('/login');
+      }
+      // Otherwise, allow current route (user is where they should be)
+    }, 50); // Small delay to ensure router is ready
+
+    return () => clearTimeout(timer);
+  }, [isAuthenticated, loading, segments, router, initialAuthCheck]);
+
+  // Show loading screen only while doing initial auth check
+  // This prevents showing login screen briefly before redirecting
+  if (loading || !initialAuthCheck) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#3B82F6" />
+      </View>
+    );
+  }
 
   return (
     <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
@@ -105,3 +133,12 @@ function RootLayoutNav() {
     </ThemeProvider>
   );
 }
+
+const styles = StyleSheet.create({
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: '#1A202C',
+  },
+});

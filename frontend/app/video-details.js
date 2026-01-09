@@ -331,7 +331,7 @@ export default function VideoDetail() {
   };
 
   const renderReply = (reply, commentId) => (
-    <View key={reply._id} style={styles.replyItem}>
+    <View style={styles.replyItem}>
       <Image
         source={{ uri: reply.userId.avatar || 'https://via.placeholder.com/32' }}
         style={styles.replyAvatar}
@@ -380,7 +380,11 @@ export default function VideoDetail() {
         </View>
         {item.replies && item.replies.length > 0 && (
           <View style={styles.repliesContainer}>
-            {item.replies.map((reply) => renderReply(reply, item._id))}
+            {item.replies.map((reply) => (
+              <View key={reply._id || reply.id || `reply-${item._id}-${reply.createdAt}`}>
+                {renderReply(reply, item._id)}
+              </View>
+            ))}
           </View>
         )}
       </View>
@@ -426,10 +430,10 @@ export default function VideoDetail() {
   }
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={Platform.OS === 'android' ? ['top'] : ['top', 'bottom']}>
       <StatusBar style="light" />
       
-      {/* Header - Keep this outside KAV so it stays pinned */}
+      {/* Header - Keep this outside scroll so it stays pinned */}
       <View style={styles.header}>
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
@@ -438,11 +442,12 @@ export default function VideoDetail() {
         <View style={styles.placeholder} />
       </View>
 
-      {/* KAV wraps everything else */}
+      {/* KAV wraps scrollable content and input */}
       <KeyboardAvoidingView
         style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
+        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+        enabled={true}
       >
         {/* The ScrollView must have flex: 1 to shrink when the keyboard appears */}
         <ScrollView
@@ -450,6 +455,7 @@ export default function VideoDetail() {
           contentContainerStyle={styles.scrollableContentContainer}
           keyboardShouldPersistTaps="handled"
           showsVerticalScrollIndicator={true}
+          nestedScrollEnabled={true}
         >
           {/* Video Player Section */}
           <View style={styles.videoContainer}>
@@ -544,7 +550,11 @@ export default function VideoDetail() {
             </View>
 
             {highlight?.comments && highlight.comments.length > 0 ? (
-              highlight.comments.map((item) => renderComment({ item }))
+              highlight.comments.map((item) => (
+                <View key={item._id || item.id}>
+                  {renderComment({ item })}
+                </View>
+              ))
             ) : (
               <View style={styles.emptyComments}>
                 <Text style={styles.emptyCommentsText}>
@@ -706,15 +716,16 @@ const styles = StyleSheet.create({
     flex: 1, // Allows the scroll area to give space to the keyboard
   },
   scrollableContentContainer: {
-    paddingBottom: 20,
+    paddingBottom: 100, // Extra padding so content isn't hidden behind input when keyboard is up
   },
   // Input sits outside the ScrollView but inside the KAV
   bottomInputWrapper: {
     backgroundColor: '#1A202C',
     borderTopWidth: 1,
     borderTopColor: '#2D3748',
-    // Ensures the input stays above the iOS Home Indicator
-    paddingBottom: Platform.OS === 'ios' ? 25 : 10,
+    // Ensures the input stays above the iOS Home Indicator and Android navigation bar
+    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
+    paddingTop: Platform.OS === 'android' ? 8 : 0,
   },
   descriptionContainer: {
     padding: 16,
@@ -864,6 +875,12 @@ const styles = StyleSheet.create({
     borderRadius: 0,
     borderTopWidth: 1,
     borderTopColor: '#2D3748',
+  },
+  replyingToContent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    flex: 1,
+    flexWrap: 'wrap',
   },
   replyingToText: {
     fontSize: 12,

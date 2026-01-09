@@ -420,7 +420,8 @@ const MarqueeComponent = ({ text }: { text: string }) => {
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading...</Text>
+          <Text style={styles.loadingText}>Getting all your data</Text>
+          <Text style={styles.loadingText}>Almost there...</Text>
         </View>
       </SafeAreaView>
     )
