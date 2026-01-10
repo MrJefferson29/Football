@@ -29,6 +29,37 @@ export default function LocalLeaguesScreen() {
     'Regional Championships': { logo: '🏆', color: '#CD7F32', fullName: 'Regional Championships' },
   };
 
+  // Format time to 24-hour format
+  const formatTime24Hour = (timeString: string): string => {
+    if (!timeString) return '';
+    
+    // If already in 24-hour format (HH:MM), return as is
+    const timeRegex24 = /^([0-1]?[0-9]|2[0-3]):[0-5][0-9]$/;
+    if (timeRegex24.test(timeString)) {
+      return timeString;
+    }
+    
+    // If in 12-hour format, convert to 24-hour
+    const timeRegex12 = /^([0-1]?[0-9]):([0-5][0-9])\s?(AM|PM)$/i;
+    const match = timeString.match(timeRegex12);
+    if (match) {
+      let hours = parseInt(match[1], 10);
+      const minutes = match[2];
+      const period = match[3].toUpperCase();
+      
+      if (period === 'PM' && hours !== 12) {
+        hours += 12;
+      } else if (period === 'AM' && hours === 12) {
+        hours = 0;
+      }
+      
+      return `${hours.toString().padStart(2, '0')}:${minutes}`;
+    }
+    
+    // Return original if format not recognized
+    return timeString;
+  };
+
   // Helper function to check if voting is disabled for a match
   const isVotingDisabled = (match: any): boolean => {
     if (!match.matchDate || !match.matchTime) {
@@ -36,8 +67,26 @@ export default function LocalLeaguesScreen() {
     }
 
     try {
-      const matchDateTime = new Date(match.matchDate);
-      const timeParts = match.matchTime.split(':');
+      // Parse matchDate - handle both ISO string and Date object
+      // Important: We need to parse the date in LOCAL timezone to avoid timezone issues
+      let matchDateObj: Date;
+      if (match.matchDate instanceof Date) {
+        // If already a Date object, clone it
+        matchDateObj = new Date(match.matchDate.getTime());
+      } else if (typeof match.matchDate === 'string') {
+        // If it's a string, parse it carefully to avoid timezone issues
+        // Extract just the date part (YYYY-MM-DD) and create a local date
+        const dateStr = match.matchDate.split('T')[0]; // Get just the date part (YYYY-MM-DD)
+        const [year, month, day] = dateStr.split('-').map(Number);
+        // Create date in LOCAL timezone (months are 0-indexed in JS Date)
+        matchDateObj = new Date(year, month - 1, day);
+      } else {
+        matchDateObj = new Date(match.matchDate);
+      }
+
+      // Parse matchTime - ensure it's in 24-hour format
+      const time24 = formatTime24Hour(match.matchTime);
+      const timeParts = time24.split(':');
       const hours = parseInt(timeParts[0], 10);
       const minutes = parseInt(timeParts[1] || '0', 10);
 
@@ -45,10 +94,11 @@ export default function LocalLeaguesScreen() {
         return false;
       }
 
-      matchDateTime.setHours(hours, minutes, 0, 0);
+      // Set hours and minutes in LOCAL time (not UTC)
+      matchDateObj.setHours(hours, minutes, 0, 0);
 
       // Add 100 minutes to match time
-      const votingDeadline = new Date(matchDateTime);
+      const votingDeadline = new Date(matchDateObj);
       votingDeadline.setMinutes(votingDeadline.getMinutes() + 100);
 
       // Check if current time has passed the voting deadline
@@ -81,12 +131,23 @@ export default function LocalLeaguesScreen() {
     }
   }, [selectedInterQuarterLeague]);
 
+  // Sort matches by most recently posted (createdAt descending)
+  const sortMatchesByRecent = (matchesArray: any[]) => {
+    return [...matchesArray].sort((a, b) => {
+      // Sort by createdAt (newest first), fallback to _id if createdAt not available
+      const aTime = a.createdAt ? new Date(a.createdAt).getTime() : (a._id ? new Date(a._id.substring(0, 8)).getTime() : 0);
+      const bTime = b.createdAt ? new Date(b.createdAt).getTime() : (b._id ? new Date(b._id.substring(0, 8)).getTime() : 0);
+      return bTime - aTime; // Descending order (newest first)
+    });
+  };
+
   const loadMatches = async () => {
     // First check cache
     const cachedData = getCacheData('matches_local');
     if (cachedData) {
-      setMatches(cachedData);
-      const leagueNames = (cachedData as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+      const sortedMatches = sortMatchesByRecent(cachedData);
+      setMatches(sortedMatches);
+      const leagueNames = (sortedMatches as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
       const uniqueLeagues = [...new Set(leagueNames)] as string[];
       setLeagues(uniqueLeagues);
       if (uniqueLeagues.length > 0 && !selectedLeague) {
@@ -101,10 +162,11 @@ export default function LocalLeaguesScreen() {
     try {
       const response = await matchesAPI.getMatches({ leagueType: 'local' });
       if (response.success) {
-        setCacheData('matches_local', response.data);
-        setMatches(response.data);
+        const sortedMatches = sortMatchesByRecent(response.data);
+        setCacheData('matches_local', sortedMatches);
+        setMatches(sortedMatches);
         // Extract unique leagues
-        const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+        const leagueNames = (sortedMatches as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
         const uniqueLeagues = [...new Set(leagueNames)] as string[];
         setLeagues(uniqueLeagues);
         if (uniqueLeagues.length > 0 && !selectedLeague) {
@@ -127,7 +189,8 @@ export default function LocalLeaguesScreen() {
     const cachedData = getCacheData(cacheKey);
     
     if (cachedData) {
-      setMatches(cachedData);
+      const sortedMatches = sortMatchesByRecent(cachedData);
+      setMatches(sortedMatches);
       setLoading(false);
     } else {
       setLoading(true);
@@ -137,8 +200,9 @@ export default function LocalLeaguesScreen() {
     try {
       const response = await matchesAPI.getMatchesByLeague(selectedLeague, { leagueType: 'local' });
       if (response.success) {
-        setCacheData(cacheKey, response.data);
-        setMatches(response.data);
+        const sortedMatches = sortMatchesByRecent(response.data);
+        setCacheData(cacheKey, sortedMatches);
+        setMatches(sortedMatches);
       }
     } catch (error: any) {
       if (!cachedData) {
@@ -163,7 +227,7 @@ export default function LocalLeaguesScreen() {
     setSelectedMatch({
       ...match,
       id: match._id || match.id,
-      time: match.matchTime,
+      time: formatTime24Hour(match.matchTime),
       league: match.league || 'Other'
     });
     setShowVotingModal(true);
@@ -202,8 +266,9 @@ export default function LocalLeaguesScreen() {
     // First check cache
     const cachedData = getCacheData('matches_inter-quarter');
     if (cachedData) {
-      setInterQuarterMatches(cachedData);
-      const leagueNames = (cachedData as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+      const sortedMatches = sortMatchesByRecent(cachedData);
+      setInterQuarterMatches(sortedMatches);
+      const leagueNames = (sortedMatches as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
       const uniqueLeagues: string[] = Array.from(new Set(leagueNames));
       setInterQuarterLeagues(uniqueLeagues);
       if (uniqueLeagues.length > 0 && !selectedInterQuarterLeague) {
@@ -218,10 +283,11 @@ export default function LocalLeaguesScreen() {
     try {
       const response = await matchesAPI.getMatches({ leagueType: 'inter-quarter' });
       if (response.success) {
-        setCacheData('matches_inter-quarter', response.data);
-        setInterQuarterMatches(response.data);
+        const sortedMatches = sortMatchesByRecent(response.data);
+        setCacheData('matches_inter-quarter', sortedMatches);
+        setInterQuarterMatches(sortedMatches);
         // Extract unique leagues
-        const leagueNames = (response.data as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
+        const leagueNames = (sortedMatches as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
         const uniqueLeagues: string[] = Array.from(new Set(leagueNames));
         setInterQuarterLeagues(uniqueLeagues);
         if (uniqueLeagues.length > 0 && !selectedInterQuarterLeague) {
@@ -244,7 +310,8 @@ export default function LocalLeaguesScreen() {
     const cachedData = getCacheData(cacheKey);
     
     if (cachedData) {
-      setInterQuarterMatches(cachedData);
+      const sortedMatches = sortMatchesByRecent(cachedData);
+      setInterQuarterMatches(sortedMatches);
       setLoadingInterQuarter(false);
     } else {
       setLoadingInterQuarter(true);
@@ -254,8 +321,9 @@ export default function LocalLeaguesScreen() {
     try {
       const response = await matchesAPI.getMatchesByLeague(selectedInterQuarterLeague, { leagueType: 'inter-quarter' });
       if (response.success) {
-        setCacheData(cacheKey, response.data);
-        setInterQuarterMatches(response.data);
+        const sortedMatches = sortMatchesByRecent(response.data);
+        setCacheData(cacheKey, sortedMatches);
+        setInterQuarterMatches(sortedMatches);
       }
     } catch (error: any) {
       if (!cachedData) {
@@ -375,7 +443,7 @@ export default function LocalLeaguesScreen() {
                         ) : votingDisabled ? (
                           <Text style={styles.time}>Finished</Text>
                         ) : (
-                          <Text style={styles.time}>{match.matchTime}</Text>
+                          <Text style={styles.time}>{formatTime24Hour(match.matchTime)}</Text>
                         )}
                         {!votingDisabled && <Text style={styles.voteText}>Tap to vote</Text>}
                       </View>
@@ -493,7 +561,7 @@ export default function LocalLeaguesScreen() {
                           ) : votingDisabled ? (
                             <Text style={styles.time}>Finished</Text>
                           ) : (
-                            <Text style={styles.time}>{match.matchTime}</Text>
+                            <Text style={styles.time}>{formatTime24Hour(match.matchTime)}</Text>
                           )}
                           {!votingDisabled && <Text style={styles.voteText}>Tap to vote</Text>}
                         </View>

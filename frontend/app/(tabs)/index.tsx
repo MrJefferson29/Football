@@ -415,13 +415,48 @@ const MarqueeComponent = ({ text }: { text: string }) => {
     setSelectedMatch(null)
   }
 
+  // Animated pulse loader for index screen
+  const pulseAnim = useRef(new Animated.Value(1)).current;
+
+  useEffect(() => {
+    if (loading) {
+      // Start pulse animation when loading
+      Animated.loop(
+        Animated.sequence([
+          Animated.timing(pulseAnim, {
+            toValue: 1.1,
+            duration: 700,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease),
+          }),
+          Animated.timing(pulseAnim, {
+            toValue: 1,
+            duration: 700,
+            useNativeDriver: true,
+            easing: Easing.inOut(Easing.ease),
+          }),
+        ])
+      ).start();
+    } else {
+      // Stop animation when done loading
+      pulseAnim.setValue(1);
+    }
+  }, [loading, pulseAnim]);
+
   if (loading) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.loadingContainer}>
-          <ActivityIndicator size="large" color="#3B82F6" />
+          <Animated.View 
+            style={[
+              styles.loaderBox, 
+              { transform: [{ scale: pulseAnim }] }
+            ]}
+          >
+            <ActivityIndicator size="large" color="#3B82F6" />
+          </Animated.View>
           <Text style={styles.loadingText}>Getting all your data</Text>
-          <Text style={styles.loadingText}>Almost there...</Text>
+          <Text style={styles.loadingSubtext}>Almost there...</Text>
         </View>
       </SafeAreaView>
     )
@@ -1327,7 +1362,7 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   carouselContainer: {
-    height: 120,
+    height: 140,
   },
   carousel: {
     flex: 1,
@@ -1522,12 +1557,31 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: "center",
     alignItems: "center",
+    backgroundColor: "#0F172A", // dark premium background
+  },
+  loaderBox: {
+    width: 80,
+    height: 80,
+    borderRadius: 20,
+    backgroundColor: "#1E293B",
+    justifyContent: "center",
+    alignItems: "center",
+    shadowColor: "#3B82F6",
+    shadowOpacity: 0.4,
+    shadowRadius: 10,
+    elevation: 6,
   },
   loadingText: {
-    marginTop: 10,
+    marginTop: 18,
     fontFamily: fonts.body,
-    color: "#FFFFFF",
-    fontSize: 16,
+    color: "#CBD5E1",
+    fontSize: 15,
+  },
+  loadingSubtext: {
+    marginTop: 8,
+    fontFamily: fonts.body,
+    color: "#94A3B8",
+    fontSize: 13,
   },
   noDataText: {
     fontFamily: fonts.body,

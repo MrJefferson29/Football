@@ -275,13 +275,13 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   forumName: {
-    fontSize: 18,
+    fontSize: 14,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
     marginBottom: 5,
   },
   forumDescription: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#9CA3AF',
     marginBottom: 8,
     lineHeight: 20,
