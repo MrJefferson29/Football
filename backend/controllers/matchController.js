@@ -248,6 +248,11 @@ exports.voteMatch = async (req, res) => {
       choice: prediction
     });
     
+    // Initialize activities array if it doesn't exist
+    if (!user.activities || !Array.isArray(user.activities)) {
+      user.activities = [];
+    }
+    
     // Add activity
     const scoreText = homeScore !== undefined && awayScore !== undefined 
       ? ` (${homeScore}-${awayScore})` 
@@ -394,6 +399,11 @@ exports.updateMatchScore = async (req, res) => {
           user.points += PREDICTION_POINTS;
           user.correctPredictions = (user.correctPredictions || 0) + 1;
           
+          // Initialize activities array if it doesn't exist
+          if (!user.activities || !Array.isArray(user.activities)) {
+            user.activities = [];
+          }
+          
           // Add activity
           user.activities.push({
             action: `Earned ${PREDICTION_POINTS} points for correct prediction: ${match.homeTeam} ${homeScore}-${awayScore} ${match.awayTeam}`,
@@ -446,7 +456,7 @@ exports.updateMatchScore = async (req, res) => {
           'team2.name': { $regex: new RegExp(`^${escapeRegex(match.homeTeam.trim())}$`, 'i') }
         }
       ]
-    }).populate('headUserId', 'points correctPredictions totalPredictions');
+    }).populate('headUserId', 'points correctPredictions totalPredictions activities');
 
     // Check and award points for forum predictions
     for (const forumPrediction of forumPredictions) {
@@ -474,6 +484,11 @@ exports.updateMatchScore = async (req, res) => {
           forumHead.points = (forumHead.points || 0) + FORUM_PREDICTION_POINTS;
           forumHead.correctPredictions = (forumHead.correctPredictions || 0) + 1;
           forumHead.totalPredictions = (forumHead.totalPredictions || 0) + 1;
+
+          // Initialize activities array if it doesn't exist
+          if (!forumHead.activities || !Array.isArray(forumHead.activities)) {
+            forumHead.activities = [];
+          }
 
           // Add activity
           forumHead.activities.push({

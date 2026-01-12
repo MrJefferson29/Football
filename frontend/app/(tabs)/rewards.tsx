@@ -1,70 +1,135 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  ActivityIndicator, 
+  Alert, 
+  Image, 
+  ScrollView, 
+  StyleSheet, 
+  Text, 
+  TextInput,
+  TouchableOpacity, 
+  TouchableWithoutFeedback,
+  View, 
+  RefreshControl,
+  KeyboardAvoidingView,
+  Platform,
+  Keyboard
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
 import { predictionForumsAPI, forumJoinRequestsAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDataCache } from '@/contexts/DataCacheContext';
 
-export default function RewardsScreen() {
+// --- Types ---
+interface Forum {
+  _id: string;
+  name: string;
+  description?: string;
+  profilePicture?: string;
+  memberCount?: number;
+  members: (string | { _id: string })[];
+  headUserId: {
+    _id: string;
+    username: string;
+  };
+}
+
+interface JoinRequest {
+  _id: string;
+  status: 'pending' | 'approved' | 'rejected';
+  forumId: string | { _id: string };
+}
+
+export default function PredictionForumsScreen() {
   const { user } = useAuth();
   const { getCacheData, setCacheData } = useDataCache();
-  const [forums, setForums] = useState<any[]>([]);
+  
+  const [forums, setForums] = useState<Forum[]>([]);
+  const [filteredForums, setFilteredForums] = useState<Forum[]>([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState('');
 
-  useEffect(() => {
-    loadForums();
-    loadPendingRequests();
-  }, []);
+  // --- Data Loading ---
 
   const loadPendingRequests = async () => {
     if (!user) return;
     try {
       const response = await forumJoinRequestsAPI.getMyJoinRequests();
       if (response.success) {
-        const pending = new Set(
+        const pending = new Set<string>(
           response.data
-            .filter((req: any) => req.status === 'pending')
-            .map((req: any) => req.forumId._id || req.forumId)
+            .filter((req: JoinRequest) => req.status === 'pending')
+            .map((req: JoinRequest) => 
+              typeof req.forumId === 'string' ? req.forumId : req.forumId._id
+            )
         );
         setPendingRequests(pending);
       }
     } catch (error) {
-      // Silently fail - not critical
       console.error('Failed to load pending requests:', error);
     }
   };
 
-  const loadForums = async () => {
-    // First check cache
-    const cachedData = getCacheData('predictionForums');
-    if (cachedData) {
-      setForums(cachedData);
-      setLoading(false);
+  const loadForums = useCallback(async (isPullToRefresh = false) => {
+    if (!isPullToRefresh) {
+      const cachedData = getCacheData('predictionForums');
+      if (cachedData) {
+        setForums(cachedData);
+        setLoading(false);
+      }
+    } else {
+      setRefreshing(true);
     }
 
-    // Refresh in background
     try {
-      const response = await predictionForumsAPI.getPredictionForums();
-      if (response.success) {
-        setCacheData('predictionForums', response.data);
-        setForums(response.data);
+      // Fetch both forums and requests in parallel
+      const [forumRes] = await Promise.all([
+        predictionForumsAPI.getPredictionForums(),
+        loadPendingRequests()
+      ]);
+
+      if (forumRes.success) {
+        setCacheData('predictionForums', forumRes.data);
+        setForums(forumRes.data);
+        setFilteredForums(forumRes.data);
       }
     } catch (error: any) {
-      if (!cachedData) {
-        Alert.alert('Error', error.message || 'Failed to load prediction forums');
+      if (forums.length === 0) {
+        Alert.alert('Error', error.message || 'Failed to load forums');
       }
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [getCacheData, setCacheData, forums.length, user]);
 
-  const fetchForums = loadForums;
+  useEffect(() => {
+    loadForums();
+  }, []);
 
-  const handleRequestToJoin = async (forum: any) => {
+  // Filter forums based on search query
+  useEffect(() => {
+    if (!searchQuery.trim()) {
+      setFilteredForums(forums);
+    } else {
+      const query = searchQuery.toLowerCase().trim();
+      const filtered = forums.filter(forum => 
+        forum.name.toLowerCase().includes(query) ||
+        forum.description?.toLowerCase().includes(query) ||
+        forum.headUserId?.username.toLowerCase().includes(query)
+      );
+      setFilteredForums(filtered);
+    }
+  }, [searchQuery, forums]);
+
+  // --- Handlers ---
+
+  const handleRequestToJoin = async (forum: Forum) => {
     if (!user) {
       Alert.alert('Login Required', 'Please log in to request to join forums');
       return;
@@ -73,61 +138,44 @@ export default function RewardsScreen() {
     try {
       const response = await forumJoinRequestsAPI.createJoinRequest(forum._id);
       if (response.success) {
-        Alert.alert('Success', `Your request to join ${forum.name} has been sent to the forum head!`);
+        Alert.alert('Success', `Your request to join ${forum.name} has been sent!`);
         setPendingRequests(prev => new Set(prev).add(forum._id));
-        loadPendingRequests(); // Refresh pending requests
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to send join request');
     }
   };
 
-  const handleViewForum = (forum: any) => {
-    if (!user) {
-      // Non-logged-in users see preview
-      router.push({
-        pathname: '/forum-preview',
-        params: { id: forum._id }
-      });
-      return;
-    }
-
-    const memberStatus = isMember(forum);
-    const headStatus = isHead(forum);
+  const handleViewForum = (forum: Forum) => {
+    const isMemberOrHead = isMember(forum) || isHead(forum);
     
-    // Only members and heads can access the full forum
-    if (memberStatus || headStatus) {
-      router.push({
-        pathname: '/prediction-forum-detail',
-        params: { id: forum._id }
-      });
-    } else {
-      // Non-members see the preview/statistics screen
-      router.push({
-        pathname: '/forum-preview',
-        params: { id: forum._id }
-      });
-    }
+    router.push({
+      pathname: isMemberOrHead ? '/prediction-forum-detail' : '/forum-preview',
+      params: { id: forum._id }
+    });
   };
 
-  const isMember = (forum: any) => {
+  // --- Helper Functions ---
+
+  const isMember = (forum: Forum) => {
     if (!user) return false;
-    return forum.members?.some((member: any) => 
+    return forum.members?.some((member) => 
       (typeof member === 'string' ? member : member._id) === user._id
     );
   };
 
-  const isHead = (forum: any) => {
+  const isHead = (forum: Forum) => {
     if (!user) return false;
     return forum.headUserId?._id === user._id;
   };
 
-  if (loading) {
+  // --- Renders ---
+
+  if (loading && forums.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Prediction Forums</Text>
-          <View style={styles.placeholder} />
         </View>
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
@@ -141,27 +189,73 @@ export default function RewardsScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Prediction Forums</Text>
-        <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        <View style={styles.introSection}>
-          <Text style={styles.introTitle}>Join Expert Prediction Forums</Text>
-          <Text style={styles.introDescription}>
-            Connect with top football analysts, get exclusive insights, and improve your prediction accuracy
-          </Text>
-        </View>
+      <KeyboardAvoidingView 
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        style={styles.keyboardAvoidingView}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
+      >
+        <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
+          <ScrollView 
+            style={styles.content} 
+            contentContainerStyle={styles.scrollContent}
+            showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            refreshControl={
+              <RefreshControl
+                refreshing={refreshing}
+                onRefresh={() => loadForums(true)}
+                tintColor="#3B82F6"
+                colors={['#3B82F6']}
+              />
+            }
+          >
+            <View style={styles.introSection}>
+              <Text style={styles.introTitle}>Join Expert Forums</Text>
+              <Text style={styles.introDescription}>
+                Connect with top football analysts and get exclusive insights.
+              </Text>
+            </View>
 
-        {forums.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <Ionicons name="people-outline" size={64} color="#9CA3AF" />
-            <Text style={styles.emptyText}>No Prediction Forums Yet</Text>
-            <Text style={styles.emptySubtext}>Check back later for new forums!</Text>
-          </View>
-        ) : (
-          forums.map((forum) => {
+            {/* Search Input */}
+            <View style={styles.searchContainer}>
+              <Ionicons name="search" size={20} color="#9CA3AF" style={styles.searchIcon} />
+              <TextInput
+                style={styles.searchInput}
+                placeholder="Search forums..."
+                placeholderTextColor="#6B7280"
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                returnKeyType="search"
+                clearButtonMode="while-editing"
+              />
+              {searchQuery.length > 0 && (
+                <TouchableOpacity 
+                  onPress={() => setSearchQuery('')}
+                  style={styles.clearButton}
+                >
+                  <Ionicons name="close-circle" size={20} color="#9CA3AF" />
+                </TouchableOpacity>
+              )}
+            </View>
+
+            {forums.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="people-outline" size={64} color="#9CA3AF" />
+                <Text style={styles.emptyText}>No Prediction Forums Yet</Text>
+              </View>
+            ) : filteredForums.length === 0 ? (
+              <View style={styles.emptyContainer}>
+                <Ionicons name="search-outline" size={64} color="#9CA3AF" />
+                <Text style={styles.emptyText}>No forums found</Text>
+                <Text style={styles.emptySubtext}>Try a different search term</Text>
+              </View>
+            ) : (
+              filteredForums.map((forum) => {
             const memberStatus = isMember(forum);
             const headStatus = isHead(forum);
+            const isPending = pendingRequests.has(forum._id);
 
             return (
               <TouchableOpacity
@@ -177,15 +271,19 @@ export default function RewardsScreen() {
                       <Ionicons name="trophy" size={24} color="#3B82F6" />
                     </View>
                   )}
+                  
                   <View style={styles.forumInfo}>
-                    <Text style={styles.forumName}>{forum.name}</Text>
-                    <Text style={styles.forumDescription} numberOfLines={2}>
+                    <Text style={styles.forumName} numberOfLines={1}>{forum.name}</Text>
+                    <Text style={styles.forumDescription} numberOfLines={1}>
                       {forum.description || 'No description available'}
                     </Text>
+                    
                     <View style={styles.forumStats}>
                       <View style={styles.statItem}>
                         <Ionicons name="people" size={14} color="#9CA3AF" />
-                        <Text style={styles.memberCount}>{forum.members?.length || forum.memberCount || 0} members</Text>
+                        <Text style={styles.memberCount}>
+                          {forum.members?.length || forum.memberCount || 0}
+                        </Text>
                       </View>
                       {forum.headUserId && (
                         <View style={styles.headInfo}>
@@ -195,6 +293,7 @@ export default function RewardsScreen() {
                       )}
                     </View>
                   </View>
+
                   {headStatus ? (
                     <View style={styles.headBadge}>
                       <Text style={styles.headBadgeText}>Head</Text>
@@ -205,20 +304,15 @@ export default function RewardsScreen() {
                     </View>
                   ) : (
                     <TouchableOpacity
-                      style={[
-                        styles.joinButton,
-                        pendingRequests.has(forum._id) && styles.pendingButton
-                      ]}
+                      style={[styles.joinButton, isPending && styles.pendingButton]}
                       onPress={(e) => {
                         e.stopPropagation();
-                        if (!pendingRequests.has(forum._id)) {
-                          handleRequestToJoin(forum);
-                        }
+                        if (!isPending) handleRequestToJoin(forum);
                       }}
-                      disabled={pendingRequests.has(forum._id)}
+                      disabled={isPending}
                     >
                       <Text style={styles.joinButtonText}>
-                        {pendingRequests.has(forum._id) ? 'Request Pending' : 'Request to Join'}
+                        {isPending ? 'Pending' : 'Join'}
                       </Text>
                     </TouchableOpacity>
                   )}
@@ -233,7 +327,9 @@ export default function RewardsScreen() {
             Join forums to access exclusive predictions and insights.
           </Text>
         </View>
-      </ScrollView>
+          </ScrollView>
+        </TouchableWithoutFeedback>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }
@@ -244,26 +340,24 @@ const styles = StyleSheet.create({
     backgroundColor: '#1A202C',
   },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
     paddingHorizontal: 20,
     paddingVertical: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#2D3748',
+    alignItems: 'center',
   },
   headerTitle: {
     fontSize: 20,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
-    flex: 1,
-    textAlign: 'center',
   },
-  placeholder: {
-    width: 34,
+  keyboardAvoidingView: {
+    flex: 1,
   },
   content: {
     flex: 1,
+  },
+  scrollContent: {
     paddingHorizontal: 20,
   },
   introSection: {
@@ -274,35 +368,58 @@ const styles = StyleSheet.create({
     fontSize: 24,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
-    marginBottom: 10,
+    marginBottom: 8,
     textAlign: 'center',
   },
   introDescription: {
-    fontSize: 16,
+    fontSize: 15,
     color: '#9CA3AF',
     textAlign: 'center',
-    lineHeight: 24,
+    lineHeight: 22,
+    fontFamily: fonts.body,
+  },
+  searchContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#2D3748',
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    marginBottom: 20,
+    borderWidth: 1,
+    borderColor: '#374151',
+  },
+  searchIcon: {
+    marginRight: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 14,
+    fontFamily: fonts.body,
+    color: '#FFFFFF',
+    paddingVertical: 0,
+  },
+  clearButton: {
+    marginLeft: 8,
+    padding: 4,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
   },
   loadingText: {
     marginTop: 10,
     color: '#9CA3AF',
-    fontSize: 16,
+    fontFamily: fonts.body,
   },
   emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: 60,
   },
   emptyText: {
     fontSize: 18,
-    fontFamily: fonts.heading,
+    fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
     marginTop: 15,
   },
@@ -310,61 +427,61 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontFamily: fonts.body,
     color: '#9CA3AF',
-    marginTop: 5,
+    marginTop: 8,
   },
   forumCard: {
     backgroundColor: '#2D3748',
     borderRadius: 12,
-    marginBottom: 15,
-    padding: 15,
+    marginBottom: 12,
+    padding: 12,
   },
   forumHeader: {
     flexDirection: 'row',
     alignItems: 'center',
   },
   forumImage: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    marginRight: 15,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    marginRight: 12,
   },
   forumIconContainer: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
+    width: 48,
+    height: 48,
+    borderRadius: 24,
     backgroundColor: '#374151',
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 15,
+    marginRight: 12,
   },
   forumInfo: {
     flex: 1,
+    marginRight: 8,
   },
   forumName: {
-    fontSize: 18,
+    fontSize: 16,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
-    marginBottom: 5,
   },
   forumDescription: {
-    fontSize: 14,
+    fontSize: 13,
     color: '#9CA3AF',
-    marginBottom: 8,
-    lineHeight: 20,
+    fontFamily: fonts.body,
+    marginVertical: 2,
   },
   forumStats: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
     alignItems: 'center',
+    marginTop: 4,
   },
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 10,
+    marginRight: 12,
   },
   memberCount: {
     fontSize: 12,
-    color: '#3B82F6',
+    color: '#9CA3AF',
     marginLeft: 4,
   },
   headInfo: {
@@ -379,55 +496,55 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontFamily: fonts.bodySemiBold,
     color: '#3B82F6',
-    marginLeft: 4,
   },
   joinButton: {
     backgroundColor: '#3B82F6',
     borderRadius: 8,
-    paddingHorizontal: 15,
+    paddingHorizontal: 16,
     paddingVertical: 8,
-    marginLeft: 'auto',
   },
   pendingButton: {
-    backgroundColor: '#6B7280',
-    opacity: 0.7,
+    backgroundColor: '#4B5563',
   },
   joinButtonText: {
-    fontSize: 14,
+    fontSize: 13,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
   },
   headBadge: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(59, 130, 246, 0.2)',
+    borderWidth: 1,
+    borderColor: '#3B82F6',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 'auto',
+    borderRadius: 8,
   },
   headBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
+    color: '#3B82F6',
   },
   memberBadge: {
-    backgroundColor: '#10B981',
-    paddingHorizontal: 8,
+    backgroundColor: 'rgba(16, 185, 129, 0.2)',
+    borderWidth: 1,
+    borderColor: '#10B981',
+    paddingHorizontal: 10,
     paddingVertical: 4,
-    borderRadius: 12,
-    marginLeft: 'auto',
+    borderRadius: 8,
   },
   memberBadgeText: {
-    fontSize: 10,
+    fontSize: 11,
     fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
+    color: '#10B981',
   },
   footer: {
-    paddingVertical: 20,
+    paddingVertical: 30,
     alignItems: 'center',
   },
   footerText: {
     fontSize: 12,
-    color: '#9CA3AF',
+    color: '#6B7280',
     textAlign: 'center',
+    fontFamily: fonts.body,
   },
 });

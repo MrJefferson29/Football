@@ -131,6 +131,41 @@ export default function MatchesScreen() {
     }
   }, [selectedLeague]);
 
+  // Check if match is more than a week old
+  const isMatchOlderThanWeek = (match: any): boolean => {
+    if (!match.matchDate) {
+      return false; // If no date, don't filter it out
+    }
+
+    try {
+      let matchDateObj: Date;
+      if (match.matchDate instanceof Date) {
+        matchDateObj = new Date(match.matchDate.getTime());
+      } else if (typeof match.matchDate === 'string') {
+        // Extract just the date part (YYYY-MM-DD) and create a local date
+        const dateStr = match.matchDate.split('T')[0];
+        const [year, month, day] = dateStr.split('-').map(Number);
+        matchDateObj = new Date(year, month - 1, day);
+      } else {
+        matchDateObj = new Date(match.matchDate);
+      }
+
+      const now = new Date();
+      const oneWeekAgo = new Date(now);
+      oneWeekAgo.setDate(oneWeekAgo.getDate() - 7);
+
+      return matchDateObj < oneWeekAgo;
+    } catch (error) {
+      console.error('Error checking match date:', error);
+      return false; // If error, don't filter it out
+    }
+  };
+
+  // Filter out matches older than a week
+  const filterRecentMatches = (matchesArray: any[]) => {
+    return matchesArray.filter(match => !isMatchOlderThanWeek(match));
+  };
+
   // Sort matches by most recently posted (createdAt descending)
   const sortMatchesByRecent = (matchesArray: any[]) => {
     return [...matchesArray].sort((a, b) => {
@@ -145,7 +180,8 @@ export default function MatchesScreen() {
     // First check cache
     const cachedData = getCacheData('matches_international');
     if (cachedData) {
-      const sortedMatches = sortMatchesByRecent(cachedData);
+      const filteredMatches = filterRecentMatches(cachedData);
+      const sortedMatches = sortMatchesByRecent(filteredMatches);
       setMatches(sortedMatches);
       const leagueNames = (sortedMatches as any[]).map((m: any) => m.league).filter((league: any) => typeof league === 'string' && Boolean(league)) as string[];
       const uniqueLeagues = [...new Set(leagueNames)] as string[];
@@ -162,7 +198,8 @@ export default function MatchesScreen() {
     try {
       const response = await matchesAPI.getMatches({ leagueType: 'international' });
       if (response.success) {
-        const sortedMatches = sortMatchesByRecent(response.data);
+        const filteredMatches = filterRecentMatches(response.data);
+        const sortedMatches = sortMatchesByRecent(filteredMatches);
         setCacheData('matches_international', sortedMatches);
         setMatches(sortedMatches);
         // Extract unique leagues
@@ -189,7 +226,8 @@ export default function MatchesScreen() {
     const cachedData = getCacheData(cacheKey);
     
     if (cachedData) {
-      const sortedMatches = sortMatchesByRecent(cachedData);
+      const filteredMatches = filterRecentMatches(cachedData);
+      const sortedMatches = sortMatchesByRecent(filteredMatches);
       setMatches(sortedMatches);
       setLoading(false);
     } else {
@@ -200,7 +238,8 @@ export default function MatchesScreen() {
     try {
       const response = await matchesAPI.getMatchesByLeague(selectedLeague, { leagueType: 'international' });
       if (response.success) {
-        const sortedMatches = sortMatchesByRecent(response.data);
+        const filteredMatches = filterRecentMatches(response.data);
+        const sortedMatches = sortMatchesByRecent(filteredMatches);
         setCacheData(cacheKey, sortedMatches);
         setMatches(sortedMatches);
       }
