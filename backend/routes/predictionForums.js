@@ -8,7 +8,8 @@ const {
   updatePredictionForum,
   getForumByHead,
   joinPredictionForum,
-  deletePredictionForum
+  deletePredictionForum,
+  getForumStatistics
 } = require('../controllers/predictionForumController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -20,6 +21,7 @@ router.get('/users/list', protect, authorize('admin'), getAllUsers);
 
 // Must come after /users/list
 router.get('/head/:userId', protect, getForumByHead);
+router.get('/:id/statistics', getForumStatistics); // Must come before /:id
 router.get('/:id', getPredictionForum);
 router.post('/', protect, authorize('admin'), createPredictionForum);
 router.delete('/:id', protect, authorize('admin'), deletePredictionForum);

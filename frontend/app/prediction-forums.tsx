@@ -1,33 +1,67 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
+import { router } from 'expo-router';
+import React, { useState, useEffect, useCallback } from 'react';
+import { 
+  ActivityIndicator, 
+  Alert, 
+  Image, 
+  ScrollView, 
+  StyleSheet, 
+  Text, 
+  TouchableOpacity, 
+  View, 
+  RefreshControl,
+  Platform
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
 import { predictionForumsAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDataCache } from '@/contexts/DataCacheContext';
 
+// --- Types ---
+interface ForumMember {
+  _id: string;
+  username: string;
+  avatar?: string;
+}
+
+interface Forum {
+  _id: string;
+  name: string;
+  description?: string;
+  profilePicture?: string;
+  memberCount: number;
+  members: (string | ForumMember)[];
+  headUserId: {
+    _id: string;
+    username: string;
+  };
+}
+
 export default function PredictionForumsScreen() {
   const { user } = useAuth();
   const { getCacheData, setCacheData } = useDataCache();
-  const [forums, setForums] = useState<any[]>([]);
+  
+  const [forums, setForums] = useState<Forum[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedForum, setSelectedForum] = useState<string | null>(null);
+  const [refreshing, setRefreshing] = useState(false);
 
-  useEffect(() => {
-    loadForums();
-  }, []);
+  // --- Logic ---
 
-  const loadForums = async () => {
-    // First check cache
-    const cachedData = getCacheData('predictionForums');
-    if (cachedData) {
-      setForums(cachedData);
-      setLoading(false);
+  const loadForums = useCallback(async (isPullToRefresh = false) => {
+    // 1. Initial Load: Try to show cached data first
+    if (!isPullToRefresh) {
+      const cachedData = getCacheData('predictionForums');
+      if (cachedData) {
+        setForums(cachedData);
+        setLoading(false);
+      }
+    } else {
+      setRefreshing(true);
     }
 
-    // Refresh in background
+    // 2. Fetch Fresh Data
     try {
       const response = await predictionForumsAPI.getPredictionForums();
       if (response.success) {
@@ -35,17 +69,22 @@ export default function PredictionForumsScreen() {
         setForums(response.data);
       }
     } catch (error: any) {
-      if (!cachedData) {
+      // Only show error alert if we have no data to show at all
+      if (forums.length === 0 && !isPullToRefresh) {
         Alert.alert('Error', error.message || 'Failed to load prediction forums');
       }
+      console.error("Forum Fetch Error:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
-  };
+  }, [getCacheData, setCacheData, forums.length]);
 
-  const fetchForums = loadForums;
+  useEffect(() => {
+    loadForums();
+  }, []);
 
-  const handleJoinForum = async (forum: any) => {
+  const handleJoinForum = async (forum: Forum) => {
     if (!user) {
       Alert.alert('Login Required', 'Please log in to join forums');
       return;
@@ -55,21 +94,46 @@ export default function PredictionForumsScreen() {
       const response = await predictionForumsAPI.joinPredictionForum(forum._id);
       if (response.success) {
         Alert.alert('Success', `You've joined ${forum.name}!`);
-        fetchForums();
+        loadForums(true); // Silent refresh to update UI
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to join forum');
     }
   };
 
-  const handleViewForum = (forum: any) => {
-    router.push({
-      pathname: '/prediction-forum-detail',
-      params: { id: forum._id }
-    });
+  const handleViewForum = (forum: Forum) => {
+    if (!user) {
+      // Non-logged-in users see preview
+      router.push({
+        pathname: '/forum-preview',
+        params: { id: forum._id }
+      });
+      return;
+    }
+
+    const isMember = user && forum.members?.some((m: any) =>
+      (typeof m === 'string' ? m : m._id) === user._id
+    );
+    const isHead = user && forum.headUserId?._id === user._id;
+    
+    // Only members and heads can access the full forum
+    if (isMember || isHead) {
+      router.push({
+        pathname: '/prediction-forum-detail',
+        params: { id: forum._id }
+      });
+    } else {
+      // Non-members see the preview/statistics screen
+      router.push({
+        pathname: '/forum-preview',
+        params: { id: forum._id }
+      });
+    }
   };
 
-  if (loading) {
+  // --- Render Helpers ---
+
+  if (loading && forums.length === 0) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.header}>
@@ -97,7 +161,18 @@ export default function PredictionForumsScreen() {
         <View style={styles.placeholder} />
       </View>
 
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView 
+        style={styles.content} 
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadForums(true)}
+            tintColor="#3B82F6"
+            colors={['#3B82F6']} // Android
+          />
+        }
+      >
         <View style={styles.introSection}>
           <Text style={styles.introTitle}>Expert Prediction Forums</Text>
           <Text style={styles.introDescription}>
@@ -142,16 +217,18 @@ export default function PredictionForumsScreen() {
                         <Ionicons name="people" size={14} color="#3B82F6" />
                         <Text style={styles.memberCount}>{forum.memberCount || 0} members</Text>
                       </View>
-                      {isHead && (
-                        <View style={styles.headBadge}>
-                          <Text style={styles.headBadgeText}>Head</Text>
-                        </View>
-                      )}
-                      {isMember && !isHead && (
-                        <View style={styles.memberBadge}>
-                          <Text style={styles.memberBadgeText}>Member</Text>
-                        </View>
-                      )}
+                      <View style={styles.badgeContainer}>
+                        {isHead && (
+                          <View style={styles.headBadge}>
+                            <Text style={styles.headBadgeText}>Head</Text>
+                          </View>
+                        )}
+                        {isMember && !isHead && (
+                          <View style={styles.memberBadge}>
+                            <Text style={styles.memberBadgeText}>Member</Text>
+                          </View>
+                        )}
+                      </View>
                     </View>
                     {forum.headUserId && (
                       <View style={styles.headInfo}>
@@ -166,6 +243,8 @@ export default function PredictionForumsScreen() {
             );
           })
         )}
+        {/* Extra padding at bottom for scroll breathing room */}
+        <View style={{ height: 40 }} />
       </ScrollView>
     </SafeAreaView>
   );
@@ -222,6 +301,17 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     marginBottom: 15,
     padding: 15,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.1,
+        shadowRadius: 4,
+      },
+      android: {
+        elevation: 3,
+      },
+    }),
   },
   forumHeader: {
     flexDirection: 'row',
@@ -231,22 +321,22 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
   },
   loadingText: {
     marginTop: 10,
     color: '#9CA3AF',
     fontSize: 16,
+    fontFamily: fonts.body,
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    paddingVertical: 50,
+    paddingVertical: 100,
   },
   emptyText: {
     fontSize: 18,
-    fontFamily: fonts.heading,
+    fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
     marginTop: 15,
   },
@@ -275,7 +365,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   forumName: {
-    fontSize: 14,
+    fontSize: 16,
     fontFamily: fonts.bodySemiBold,
     color: '#FFFFFF',
     marginBottom: 5,
@@ -284,7 +374,8 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#9CA3AF',
     marginBottom: 8,
-    lineHeight: 20,
+    lineHeight: 18,
+    fontFamily: fonts.body,
   },
   forumStats: {
     flexDirection: 'row',
@@ -294,19 +385,22 @@ const styles = StyleSheet.create({
   statItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginRight: 10,
   },
   memberCount: {
     fontSize: 12,
     color: '#3B82F6',
     marginLeft: 4,
+    fontFamily: fonts.body,
+  },
+  badgeContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   headBadge: {
     backgroundColor: '#3B82F6',
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    marginLeft: 'auto',
   },
   headBadgeText: {
     fontSize: 10,
@@ -318,7 +412,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 4,
     borderRadius: 12,
-    marginLeft: 'auto',
   },
   memberBadgeText: {
     fontSize: 10,
@@ -333,19 +426,11 @@ const styles = StyleSheet.create({
   headLabel: {
     fontSize: 12,
     color: '#9CA3AF',
+    fontFamily: fonts.body,
   },
   headName: {
     fontSize: 12,
     fontFamily: fonts.bodySemiBold,
     color: '#3B82F6',
-  },
-  footer: {
-    paddingVertical: 20,
-    alignItems: 'center',
-  },
-  footerText: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    textAlign: 'center',
   },
 });

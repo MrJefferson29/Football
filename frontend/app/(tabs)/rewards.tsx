@@ -83,10 +83,31 @@ export default function RewardsScreen() {
   };
 
   const handleViewForum = (forum: any) => {
-    router.push({
-      pathname: '/prediction-forum-detail',
-      params: { id: forum._id }
-    });
+    if (!user) {
+      // Non-logged-in users see preview
+      router.push({
+        pathname: '/forum-preview',
+        params: { id: forum._id }
+      });
+      return;
+    }
+
+    const memberStatus = isMember(forum);
+    const headStatus = isHead(forum);
+    
+    // Only members and heads can access the full forum
+    if (memberStatus || headStatus) {
+      router.push({
+        pathname: '/prediction-forum-detail',
+        params: { id: forum._id }
+      });
+    } else {
+      // Non-members see the preview/statistics screen
+      router.push({
+        pathname: '/forum-preview',
+        params: { id: forum._id }
+      });
+    }
   };
 
   const isMember = (forum: any) => {

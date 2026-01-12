@@ -278,6 +278,72 @@ exports.joinPredictionForum = async (req, res) => {
   }
 };
 
+// @desc    Get forum statistics (Public - for preview)
+// @route   GET /api/prediction-forums/:id/statistics
+// @access  Public
+exports.getForumStatistics = async (req, res) => {
+  try {
+    const forum = await PredictionForum.findById(req.params.id)
+      .populate('headUserId', 'username avatar')
+      .select('name description profilePicture memberCount headUserId createdAt');
+
+    if (!forum) {
+      return res.status(404).json({
+        success: false,
+        message: 'Prediction forum not found'
+      });
+    }
+
+    // Get prediction statistics
+    const Prediction = require('../models/Prediction');
+    const totalPredictions = await Prediction.countDocuments({ forumId: req.params.id });
+    const completedPredictions = await Prediction.countDocuments({ 
+      forumId: req.params.id, 
+      status: 'completed' 
+    });
+    const correctPredictions = await Prediction.countDocuments({ 
+      forumId: req.params.id, 
+      status: 'completed',
+      isCorrect: true 
+    });
+    const pendingPredictions = await Prediction.countDocuments({ 
+      forumId: req.params.id, 
+      status: 'pending' 
+    });
+
+    const accuracy = completedPredictions > 0 
+      ? Math.round((correctPredictions / completedPredictions) * 100) 
+      : 0;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        forum: {
+          _id: forum._id,
+          name: forum.name,
+          description: forum.description,
+          profilePicture: forum.profilePicture,
+          memberCount: forum.memberCount,
+          headUserId: forum.headUserId,
+          createdAt: forum.createdAt
+        },
+        statistics: {
+          totalPredictions,
+          completedPredictions,
+          correctPredictions,
+          pendingPredictions,
+          accuracy
+        }
+      }
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message
+    });
+  }
+};
+
 // @desc    Delete/Deactivate prediction forum (Admin only)
 // @route   DELETE /api/prediction-forums/:id
 // @access  Private (Admin only)

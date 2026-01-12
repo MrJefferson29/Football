@@ -214,6 +214,19 @@ export default function PredictionForumDetailScreen() {
     (typeof m === 'string' ? m : m._id) === user._id
   );
 
+  // Redirect non-members to preview screen
+  useEffect(() => {
+    if (forum && !loading) {
+      // If user is not logged in, or is not head and not member, redirect to preview
+      if (!user || (!isHead && !isMember)) {
+        router.replace({
+          pathname: '/forum-preview',
+          params: { id: forum._id }
+        });
+      }
+    }
+  }, [forum, user, isHead, isMember, loading]);
+
   const getTimeAgo = (dateString: string) => {
     const date = new Date(dateString);
     const now = new Date();

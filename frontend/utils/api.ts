@@ -327,6 +327,9 @@ export const predictionForumsAPI = {
       method: 'POST',
     });
   },
+  getForumStatistics: async (id: string) => {
+    return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.STATISTICS(id));
+  },
   deletePredictionForum: async (id: string) => {
     return apiRequest(API_ENDPOINTS.PREDICTION_FORUMS.BY_ID(id), {
       method: 'DELETE',

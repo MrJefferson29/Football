@@ -92,6 +92,7 @@ export const API_ENDPOINTS = {
     BY_HEAD: (userId: string) => `${API_BASE_URL}/prediction-forums/head/${userId}`,
     USERS_LIST: `${API_BASE_URL}/prediction-forums/users/list`,
     JOIN: (id: string) => `${API_BASE_URL}/prediction-forums/${id}/join`,
+    STATISTICS: (id: string) => `${API_BASE_URL}/prediction-forums/${id}/statistics`,
   },
   // Predictions
   PREDICTIONS: {
