@@ -325,17 +325,7 @@ export default function StatisticsScreen() {
           {/* Header */}
           <View style={styles.header}>
             <Text style={styles.headerTitle}>Statistics</Text>
-            <TouchableOpacity 
-              onPress={handleShare} 
-              disabled={isCapturing || loading}
-              style={styles.shareButton}
-            >
-              {isCapturing ? (
-                <ActivityIndicator size="small" color="#3B82F6" />
-              ) : (
-                <Ionicons name="share-outline" size={24} color="#3B82F6" />
-              )}
-            </TouchableOpacity>
+            <View style={styles.placeholder} />
           </View>
 
         {/* Tab Navigation */}
@@ -370,6 +360,19 @@ export default function StatisticsScreen() {
           {activeTab === 'overview' && renderOverviewTab()}
           {activeTab === 'engagement' && renderEngagementTab()}
           {activeTab === 'activity' && renderActivityTab()}
+
+          {/* Share Button */}
+          <TouchableOpacity 
+            style={styles.shareButton} 
+            onPress={handleShare}
+            disabled={isCapturing || loading}
+          >
+            {isCapturing ? (
+              <ActivityIndicator size="small" color="#FFFFFF" />
+            ) : (
+              <Text style={styles.shareButtonText}>Share Statistics</Text>
+            )}
+          </TouchableOpacity>
         </ScrollView>
       </ViewShot>
     </SafeAreaView>
@@ -398,7 +401,18 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2D3748',
   },
   shareButton: {
-    padding: 5,
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+    marginHorizontal: 20,
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
   },
   backButton: {
     padding: 5,
@@ -420,7 +434,6 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     paddingVertical: 12,
-    paddingHorizontal: 16,
     alignItems: 'center',
     borderBottomWidth: 2,
     borderBottomColor: 'transparent',

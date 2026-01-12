@@ -8,6 +8,8 @@
     "android": {
       "package": "com.j.f.s.n.football",
       "softwareKeyboardLayoutMode": "resize"
-    }
+    },
+    "owner": "j.f.s.n",
+    "slug": "football"
   }
 }

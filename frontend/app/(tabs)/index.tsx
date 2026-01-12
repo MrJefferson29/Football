@@ -1362,7 +1362,7 @@ const styles = StyleSheet.create({
     lineHeight: 12,
   },
   carouselContainer: {
-    height: 140,
+    height: 166,
   },
   carousel: {
     flex: 1,

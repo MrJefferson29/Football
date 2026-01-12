@@ -125,17 +125,7 @@ export default function ClubBattleStatsScreen() {
             <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
           </TouchableOpacity>
           <Text style={styles.headerTitle}>Gamefy Poll</Text>
-          <TouchableOpacity 
-            onPress={handleShare} 
-            disabled={isCapturing || loading}
-            style={styles.shareButton}
-          >
-            {isCapturing ? (
-              <ActivityIndicator size="small" color="#3B82F6" />
-            ) : (
-              <Ionicons name="share-outline" size={24} color="#3B82F6" />
-            )}
-          </TouchableOpacity>
+          <View style={styles.placeholder} />
         </View>
 
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -322,6 +312,18 @@ export default function ClubBattleStatsScreen() {
           </>
         )}
 
+        {/* Share Button */}
+        <TouchableOpacity 
+          style={styles.shareButton} 
+          onPress={handleShare}
+          disabled={isCapturing || loading}
+        >
+          {isCapturing ? (
+            <ActivityIndicator size="small" color="#FFFFFF" />
+          ) : (
+            <Text style={styles.shareButtonText}>Share Results</Text>
+          )}
+        </TouchableOpacity>
         </ScrollView>
       </ViewShot>
     </SafeAreaView>
@@ -347,7 +349,18 @@ const styles = StyleSheet.create({
     borderBottomColor: '#2D3748',
   },
   shareButton: {
-    padding: 5,
+    backgroundColor: '#3B82F6',
+    borderRadius: 12,
+    paddingVertical: 16,
+    alignItems: 'center',
+    marginTop: 20,
+    marginBottom: 20,
+    marginHorizontal: 20,
+  },
+  shareButtonText: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
   },
   backButton: {
     padding: 5,
@@ -375,7 +388,6 @@ const styles = StyleSheet.create({
   tab: {
     flex: 1,
     paddingVertical: 10,
-    paddingHorizontal: 16,
     borderRadius: 8,
     alignItems: 'center',
   },

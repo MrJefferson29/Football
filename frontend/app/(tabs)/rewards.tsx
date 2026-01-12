@@ -4,7 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
-import { predictionForumsAPI } from '@/utils/api';
+import { predictionForumsAPI, forumJoinRequestsAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { useDataCache } from '@/contexts/DataCacheContext';
 
@@ -13,10 +13,30 @@ export default function RewardsScreen() {
   const { getCacheData, setCacheData } = useDataCache();
   const [forums, setForums] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
+  const [pendingRequests, setPendingRequests] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     loadForums();
+    loadPendingRequests();
   }, []);
+
+  const loadPendingRequests = async () => {
+    if (!user) return;
+    try {
+      const response = await forumJoinRequestsAPI.getMyJoinRequests();
+      if (response.success) {
+        const pending = new Set(
+          response.data
+            .filter((req: any) => req.status === 'pending')
+            .map((req: any) => req.forumId._id || req.forumId)
+        );
+        setPendingRequests(pending);
+      }
+    } catch (error) {
+      // Silently fail - not critical
+      console.error('Failed to load pending requests:', error);
+    }
+  };
 
   const loadForums = async () => {
     // First check cache
@@ -44,20 +64,21 @@ export default function RewardsScreen() {
 
   const fetchForums = loadForums;
 
-  const handleJoinForum = async (forum: any) => {
+  const handleRequestToJoin = async (forum: any) => {
     if (!user) {
-      Alert.alert('Login Required', 'Please log in to join forums');
+      Alert.alert('Login Required', 'Please log in to request to join forums');
       return;
     }
 
     try {
-      const response = await predictionForumsAPI.joinPredictionForum(forum._id);
+      const response = await forumJoinRequestsAPI.createJoinRequest(forum._id);
       if (response.success) {
-        Alert.alert('Success', `You've joined ${forum.name}!`);
-        fetchForums(); // Refresh list to show updated membership
+        Alert.alert('Success', `Your request to join ${forum.name} has been sent to the forum head!`);
+        setPendingRequests(prev => new Set(prev).add(forum._id));
+        loadPendingRequests(); // Refresh pending requests
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to join forum');
+      Alert.alert('Error', error.message || 'Failed to send join request');
     }
   };
 
@@ -163,13 +184,21 @@ export default function RewardsScreen() {
                     </View>
                   ) : (
                     <TouchableOpacity
-                      style={styles.joinButton}
+                      style={[
+                        styles.joinButton,
+                        pendingRequests.has(forum._id) && styles.pendingButton
+                      ]}
                       onPress={(e) => {
                         e.stopPropagation();
-                        handleJoinForum(forum);
+                        if (!pendingRequests.has(forum._id)) {
+                          handleRequestToJoin(forum);
+                        }
                       }}
+                      disabled={pendingRequests.has(forum._id)}
                     >
-                      <Text style={styles.joinButtonText}>Join</Text>
+                      <Text style={styles.joinButtonText}>
+                        {pendingRequests.has(forum._id) ? 'Request Pending' : 'Request to Join'}
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
@@ -337,6 +366,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 15,
     paddingVertical: 8,
     marginLeft: 'auto',
+  },
+  pendingButton: {
+    backgroundColor: '#6B7280',
+    opacity: 0.7,
   },
   joinButtonText: {
     fontSize: 14,

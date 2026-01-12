@@ -18,7 +18,7 @@ import {
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { fonts } from '@/utils/typography';
-import { predictionForumsAPI, predictionsAPI, forumMessagesAPI, uploadAPI } from '@/utils/api';
+import { predictionForumsAPI, predictionsAPI, forumMessagesAPI, forumJoinRequestsAPI, uploadAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -124,20 +124,20 @@ export default function PredictionForumDetailScreen() {
     }
   };
 
-  const handleJoinForum = async () => {
+  const handleRequestToJoin = async () => {
     if (!user) {
-      Alert.alert('Login Required', 'Please log in to join forums');
+      Alert.alert('Login Required', 'Please log in to request to join forums');
       return;
     }
 
     try {
-      const response = await predictionForumsAPI.joinPredictionForum(id as string);
+      const response = await forumJoinRequestsAPI.createJoinRequest(id as string);
       if (response.success) {
-        Alert.alert('Success', `You've joined ${forum?.name}!`);
+        Alert.alert('Success', `Your request to join ${forum?.name} has been sent to the forum head!`);
         fetchForum();
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to join forum');
+      Alert.alert('Error', error.message || 'Failed to send join request');
     }
   };
 
@@ -418,6 +418,15 @@ export default function PredictionForumDetailScreen() {
               <TouchableOpacity
                 style={styles.headerActionButton}
                 onPress={() => router.push({
+                  pathname: '/forum-join-requests',
+                  params: { forumId: forum._id }
+                })}
+              >
+                <Ionicons name="people-outline" size={24} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.headerActionButton}
+                onPress={() => router.push({
                   pathname: '/create-prediction',
                   params: { forumId: forum._id }
                 })}
@@ -438,7 +447,7 @@ export default function PredictionForumDetailScreen() {
           {!isHead && !isMember && (
             <TouchableOpacity
               style={styles.headerActionButton}
-              onPress={handleJoinForum}
+              onPress={handleRequestToJoin}
             >
               <Ionicons name="person-add" size={24} color="#FFFFFF" />
             </TouchableOpacity>

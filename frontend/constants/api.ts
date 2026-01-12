@@ -107,6 +107,15 @@ export const API_ENDPOINTS = {
     BASE: `${API_BASE_URL}/forum-messages`,
     BY_FORUM: (forumId: string) => `${API_BASE_URL}/forum-messages/${forumId}`,
   },
+  // Forum Join Requests
+  FORUM_JOIN_REQUESTS: {
+    BASE: `${API_BASE_URL}/forum-join-requests`,
+    BY_FORUM: (forumId: string) => `${API_BASE_URL}/forum-join-requests/forum/${forumId}`,
+    MY_FORUMS: `${API_BASE_URL}/forum-join-requests/my-forums`,
+    MY_REQUESTS: `${API_BASE_URL}/forum-join-requests/my-requests`,
+    APPROVE: (requestId: string) => `${API_BASE_URL}/forum-join-requests/${requestId}/approve`,
+    DECLINE: (requestId: string) => `${API_BASE_URL}/forum-join-requests/${requestId}/decline`,
+  },
 };
 
 // Socket.io URL

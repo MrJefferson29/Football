@@ -528,6 +528,35 @@ export const forumMessagesAPI = {
   },
 };
 
+// Forum Join Requests API
+export const forumJoinRequestsAPI = {
+  createJoinRequest: async (forumId: string, message?: string) => {
+    return apiRequest(API_ENDPOINTS.FORUM_JOIN_REQUESTS.BASE, {
+      method: 'POST',
+      body: JSON.stringify({ forumId, message }),
+    });
+  },
+  getJoinRequestsByForum: async (forumId: string) => {
+    return apiRequest(API_ENDPOINTS.FORUM_JOIN_REQUESTS.BY_FORUM(forumId));
+  },
+  getMyForumJoinRequests: async () => {
+    return apiRequest(API_ENDPOINTS.FORUM_JOIN_REQUESTS.MY_FORUMS);
+  },
+  getMyJoinRequests: async () => {
+    return apiRequest(API_ENDPOINTS.FORUM_JOIN_REQUESTS.MY_REQUESTS);
+  },
+  approveJoinRequest: async (requestId: string) => {
+    return apiRequest(API_ENDPOINTS.FORUM_JOIN_REQUESTS.APPROVE(requestId), {
+      method: 'PUT',
+    });
+  },
+  declineJoinRequest: async (requestId: string) => {
+    return apiRequest(API_ENDPOINTS.FORUM_JOIN_REQUESTS.DECLINE(requestId), {
+      method: 'PUT',
+    });
+  },
+};
+
 // Upload API
 export const uploadAPI = {
   uploadImage: async (imageUri: string, folder?: string) => {

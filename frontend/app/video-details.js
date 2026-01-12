@@ -1,8 +1,9 @@
 import { Ionicons } from '@expo/vector-icons';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useRef, useState, useEffect } from 'react';
+import { useRef, useState, useEffect, useCallback } from 'react';
 import { ActivityIndicator, Alert, Dimensions, Linking, SafeAreaView, StyleSheet, Text, TextInput, TouchableOpacity, View, FlatList, Image, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { highlightsAPI } from '@/utils/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { fonts } from '@/utils/typography';
@@ -14,18 +15,30 @@ export default function VideoDetail() {
   const params = useLocalSearchParams();
   const { id, videoId, title, youtubeUrl } = params;
   const { user } = useAuth();
+  const insets = useSafeAreaInsets();
   const [highlight, setHighlight] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [playing, setPlaying] = useState(false);
+  const [playing, setPlaying] = useState(true);
   const [error, setError] = useState(null);
+  const [networkError, setNetworkError] = useState(false);
+  const [playerLoadError, setPlayerLoadError] = useState(false);
   const [newComment, setNewComment] = useState('');
   const [replyingTo, setReplyingTo] = useState(null);
   const [replyText, setReplyText] = useState('');
+  const [expandedReplies, setExpandedReplies] = useState(new Set());
   const flatListRef = useRef(null);
 
   useEffect(() => {
     fetchHighlight();
   }, [id]);
+
+  // Auto-play video once videoId is available
+  useEffect(() => {
+    if (!loading && actualVideoId && !playerLoadError) {
+      setPlaying(true);
+      setError(null);
+    }
+  }, [loading, actualVideoId, playerLoadError]);
 
   const fetchHighlight = async () => {
     if (!id) {
@@ -68,48 +81,35 @@ export default function VideoDetail() {
 
   const getYouTubeVideoId = (url) => {
     if (!url) return '';
-    
-    // Handle YouTube Live URLs
-    if (url.includes('youtube.com/live/')) {
-      return url.split('youtube.com/live/')[1]?.split('?')[0]?.split('&')[0] || '';
-    }
-    // Handle standard watch URLs
-    else if (url.includes('youtube.com/watch?v=')) {
-      return url.split('v=')[1]?.split('&')[0] || '';
-    }
-    // Handle short URLs
-    else if (url.includes('youtu.be/')) {
-      return url.split('youtu.be/')[1]?.split('?')[0] || '';
-    }
-    // Handle embed URLs
-    else if (url.includes('youtube.com/embed/')) {
-      return url.split('embed/')[1]?.split('?')[0] || '';
-    }
-    // Handle YouTube Shorts
-    else if (url.includes('youtube.com/shorts/')) {
-      return url.split('shorts/')[1]?.split('?')[0] || '';
-    }
-    // Assume it's already a video ID
-    else {
-      return url;
-    }
+    // Improved Regex for YouTube ID extraction
+    const regExp = /^.*((youtu.be\/)|(v\/)|(\/u\/\w\/)|(embed\/)|(watch\?))\??v?=?([^#&?]*).*/;
+    const match = url.match(regExp);
+    return (match && match[7].length === 11) ? match[7] : url;
   };
 
   const actualVideoId = highlight ? getYouTubeVideoId(highlight.youtubeUrl) : (videoId || getYouTubeVideoId(youtubeUrl));
   const actualTitle = highlight ? highlight.title : title;
   const actualYoutubeUrl = highlight ? highlight.youtubeUrl : youtubeUrl;
+
+  const onStateChange = useCallback((state) => {
+    if (state === "ended") {
+      setPlaying(false);
+    }
+  }, []);
+
+  const onPlayerReady = useCallback(() => {
+    // Start playing as soon as player is ready
+    setPlaying(true);
+  }, []);
+
+  const handleWatchFullVideo = () => {
+    const url = actualYoutubeUrl || `https://www.youtube.com/watch?v=${actualVideoId}`;
+    Linking.openURL(url).catch(() => Alert.alert('Error', 'Cannot open YouTube'));
+  };
   const thumbnailUrl = highlight?.thumbnail 
     ? getDirectImageUrl(highlight.thumbnail) 
     : (actualVideoId ? `https://img.youtube.com/vi/${actualVideoId}/maxresdefault.jpg` : null);
 
-  const handleWatchFullVideo = () => {
-    const url = actualYoutubeUrl || `https://www.youtube.com/watch?v=${actualVideoId}`;
-    Linking.openURL(url)
-      .catch(err => {
-        console.error('Error opening YouTube link:', err);
-        Alert.alert('Error', 'Something went wrong while opening the video');
-      });
-  };
 
   const handleSendComment = async () => {
     if (!newComment.trim() || !highlight || !user) return;
@@ -330,66 +330,107 @@ export default function VideoDetail() {
     return date.toLocaleDateString();
   };
 
-  const renderReply = (reply, commentId) => (
-    <View style={styles.replyItem}>
-      <Image
-        source={{ uri: reply.userId.avatar || 'https://via.placeholder.com/32' }}
-        style={styles.replyAvatar}
-      />
-      <View style={styles.commentContent}>
-        <View style={styles.commentHeader}>
-          <Text style={styles.commentUser}>{reply.userId.username}</Text>
-          <Text style={styles.commentTime}>{formatTimeAgo(reply.createdAt)}</Text>
-        </View>
-        <Text style={styles.commentText}>{reply.message}</Text>
-        <TouchableOpacity style={styles.commentLike}>
-          <Ionicons name="heart-outline" size={12} color="#9CA3AF" />
-          <Text style={styles.commentLikeCount}>{reply.likes || 0}</Text>
-        </TouchableOpacity>
-      </View>
-    </View>
-  );
-
-  const renderComment = ({ item }) => (
-    <View style={styles.commentItem}>
-      <Image
-        source={{ uri: item.userId.avatar || 'https://via.placeholder.com/32' }}
-        style={styles.commentAvatar}
-      />
-      <View style={styles.commentContent}>
-        <View style={styles.commentHeader}>
-          <Text style={styles.commentUser}>{item.userId.username}</Text>
-          <Text style={styles.commentTime}>{formatTimeAgo(item.createdAt)}</Text>
-        </View>
-        <Text style={styles.commentText}>{item.message}</Text>
-        <View style={styles.commentActions}>
-          <TouchableOpacity
-            style={styles.commentLike}
-            onPress={() => handleLikeComment(item._id)}
-          >
-            <Ionicons name="heart-outline" size={14} color="#9CA3AF" />
-            <Text style={styles.commentLikeCount}>{item.likes || 0}</Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={styles.replyButton}
-            onPress={() => setReplyingTo(item._id)}
-          >
-            <Ionicons name="return-down-forward-outline" size={14} color="#9CA3AF" />
-            <Text style={styles.replyButtonText}>Reply</Text>
-          </TouchableOpacity>
-        </View>
-        {item.replies && item.replies.length > 0 && (
-          <View style={styles.repliesContainer}>
-            {item.replies.map((reply) => (
-              <View key={reply._id || reply.id || `reply-${item._id}-${reply.createdAt}`}>
-                {renderReply(reply, item._id)}
-              </View>
-            ))}
+  const renderReply = (reply, commentId) => {
+    if (!reply || !reply.userId) {
+      return null; // Skip rendering if reply or userId is missing
+    }
+    
+    return (
+      <View style={styles.replyItem}>
+        <Image
+          source={{ uri: reply.userId.avatar || 'https://via.placeholder.com/32' }}
+          style={styles.replyAvatar}
+        />
+        <View style={styles.commentContent}>
+          <View style={styles.commentHeader}>
+            <Text style={styles.commentUser}>{reply.userId.username || 'Unknown'}</Text>
+            <Text style={styles.commentTime}>{formatTimeAgo(reply.createdAt)}</Text>
           </View>
-        )}
+          <Text style={styles.commentText}>{reply.message || ''}</Text>
+          <TouchableOpacity style={styles.commentLike}>
+            <Ionicons name="heart-outline" size={12} color="#9CA3AF" />
+            <Text style={styles.commentLikeCount}>{reply.likes || 0}</Text>
+          </TouchableOpacity>
+        </View>
       </View>
-    </View>
-  );
+    );
+  };
+
+  const toggleReplies = (commentId) => {
+    setExpandedReplies(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(commentId)) {
+        newSet.delete(commentId);
+      } else {
+        newSet.add(commentId);
+      }
+      return newSet;
+    });
+  };
+
+  const renderComment = ({ item }) => {
+    // Safety check for comment userId
+    if (!item || !item.userId) {
+      return null;
+    }
+
+    const replies = (item.replies || []).filter(reply => reply && reply.userId);
+    const replyCount = replies.length;
+    const isExpanded = expandedReplies.has(item._id);
+    const showSeeMore = replyCount > 2;
+    const displayedReplies = showSeeMore && !isExpanded ? replies.slice(0, 2) : replies;
+
+    return (
+      <View style={styles.commentItem}>
+        <Image
+          source={{ uri: item.userId.avatar || 'https://via.placeholder.com/32' }}
+          style={styles.commentAvatar}
+        />
+        <View style={styles.commentContent}>
+          <View style={styles.commentHeader}>
+            <Text style={styles.commentUser}>{item.userId.username || 'Unknown'}</Text>
+            <Text style={styles.commentTime}>{formatTimeAgo(item.createdAt)}</Text>
+          </View>
+          <Text style={styles.commentText}>{item.message || ''}</Text>
+          <View style={styles.commentActions}>
+            <TouchableOpacity
+              style={styles.commentLike}
+              onPress={() => handleLikeComment(item._id)}
+            >
+              <Ionicons name="heart-outline" size={14} color="#9CA3AF" />
+              <Text style={styles.commentLikeCount}>{item.likes || 0}</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.replyButton}
+              onPress={() => setReplyingTo(item._id)}
+            >
+              <Ionicons name="return-down-forward-outline" size={14} color="#9CA3AF" />
+              <Text style={styles.replyButtonText}>Reply</Text>
+            </TouchableOpacity>
+          </View>
+          {replyCount > 0 && (
+            <View style={styles.repliesContainer}>
+              {displayedReplies.map((reply) => (
+                <View key={reply._id || reply.id || `reply-${item._id}-${reply.createdAt}`}>
+                  {renderReply(reply, item._id)}
+                </View>
+              ))}
+              {showSeeMore && (
+                <TouchableOpacity
+                  style={styles.seeMoreButton}
+                  onPress={() => toggleReplies(item._id)}
+                >
+                  <Text style={styles.seeMoreButtonText}>
+                    {isExpanded ? 'See less' : `See ${replyCount - 2} more replies`}
+                  </Text>
+                </TouchableOpacity>
+              )}
+            </View>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   if (loading) {
     return (
@@ -430,7 +471,7 @@ export default function VideoDetail() {
   }
 
   return (
-    <SafeAreaView style={styles.container} edges={Platform.OS === 'android' ? ['top'] : ['top', 'bottom']}>
+    <SafeAreaView style={styles.container} edges={['top']}>
       <StatusBar style="light" />
       
       {/* Header - Keep this outside scroll so it stays pinned */}
@@ -444,10 +485,9 @@ export default function VideoDetail() {
 
       {/* KAV wraps scrollable content and input */}
       <KeyboardAvoidingView
-        style={styles.keyboardAvoidingView}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'padding'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 0}
-        enabled={true}
+        style={{ flex: 1 }}
+        behavior={Platform.OS === 'ios' ? 'padding' : null}
+        keyboardVerticalOffset={Platform.OS === 'ios' ? 90 : 0}
       >
         {/* The ScrollView must have flex: 1 to shrink when the keyboard appears */}
         <ScrollView
@@ -459,7 +499,27 @@ export default function VideoDetail() {
         >
           {/* Video Player Section */}
           <View style={styles.videoContainer}>
-            {!playing && thumbnailUrl && (
+            {actualVideoId && !playerLoadError ? (
+              <YoutubePlayer
+                height={Dimensions.get('window').height * 0.4}
+                videoId={actualVideoId}
+                play={playing}
+                onChangeState={onStateChange}
+                onReady={onPlayerReady}
+                initialPlayerParams={{
+                  autoplay: 1,
+                }}
+                onError={() => {
+                  setPlayerLoadError(true);
+                  setPlaying(false);
+                }}
+                webViewProps={{
+                  allowsInlineMediaPlayback: true,
+                  mediaPlaybackRequiresUserAction: false,
+                }}
+              />
+
+            ) : (thumbnailUrl || playerLoadError) ? (
               <View style={styles.thumbnailContainer}>
                 <Image
                   source={{ uri: thumbnailUrl }}
@@ -469,43 +529,19 @@ export default function VideoDetail() {
                 <View style={styles.playButtonOverlay}>
                   <TouchableOpacity
                     style={styles.playButton}
-                    onPress={() => setPlaying(true)}
+                    onPress={handleWatchFullVideo}
                   >
                     <Ionicons name="play" size={48} color="#FFFFFF" />
                   </TouchableOpacity>
+                  {playerLoadError && (
+                    <View style={styles.errorOverlay}>
+                      <Text style={styles.errorOverlayText}>Network Error</Text>
+                      <Text style={styles.errorOverlaySubtext}>Tap play to open in YouTube</Text>
+                    </View>
+                  )}
                 </View>
               </View>
-            )}
-            {playing && actualVideoId && (
-              <YoutubePlayer
-                height={Dimensions.get('window').height * 0.4}
-                videoId={actualVideoId}
-                play={playing}
-                onChangeState={(state) => {
-                  if (state === 'ended' || state === 'paused') {
-                    setPlaying(false);
-                  }
-                }}
-                onError={(error) => {
-                  console.error('YouTube Player Error:', error);
-                  setError('Failed to play video');
-                  setPlaying(false);
-                  Alert.alert(
-                    'Playback Error',
-                    'Unable to play this video. Would you like to watch it on YouTube instead?',
-                    [
-                      { text: 'Cancel', style: 'cancel' },
-                      { text: 'Watch on YouTube', onPress: handleWatchFullVideo }
-                    ]
-                  );
-                }}
-                webViewProps={{
-                  allowsInlineMediaPlayback: true,
-                  mediaPlaybackRequiresUserAction: false,
-                }}
-                webViewStyle={{ opacity: 0.99 }}
-              />
-            )}
+            ) : null}
             {error && !playing && (
               <View style={styles.errorContainer}>
                 <Text style={styles.errorText}>{error}</Text>
@@ -539,7 +575,7 @@ export default function VideoDetail() {
               {highlight?.description || 'No description available'}
             </Text>
             {highlight?.views && (
-              <Text style={styles.viewsText}>{highlight.views} views</Text>
+              <Text style={styles.viewsText}>{highlight.views}</Text>
             )}
           </View>
 
@@ -550,7 +586,7 @@ export default function VideoDetail() {
             </View>
 
             {highlight?.comments && highlight.comments.length > 0 ? (
-              highlight.comments.map((item) => (
+              highlight.comments.filter(item => item && item.userId).map((item) => (
                 <View key={item._id || item.id}>
                   {renderComment({ item })}
                 </View>
@@ -566,7 +602,7 @@ export default function VideoDetail() {
         </ScrollView>
 
         {/* Input sits outside the ScrollView but inside the KAV */}
-        <View style={styles.bottomInputWrapper}>
+        <View style={[styles.bottomInputWrapper, { paddingBottom: Math.max(insets.bottom, 15) }]}>
           {replyingTo && (
             <View style={styles.replyingToContainer}>
               <View style={styles.replyingToContent}>
@@ -645,7 +681,7 @@ const styles = StyleSheet.create({
   },
   videoContainer: {
     width: '100%',
-    height: Dimensions.get('window').height * 0.4,
+    height: Dimensions.get('window').height * 0.3,
     backgroundColor: '#000000',
     position: 'relative',
   },
@@ -697,6 +733,27 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontFamily: fonts.bodySemiBold,
   },
+  errorOverlay: {
+    position: 'absolute',
+    bottom: 20,
+    left: 20,
+    right: 20,
+    backgroundColor: 'rgba(0, 0, 0, 0.8)',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+  errorOverlayText: {
+    color: '#EF4444',
+    fontSize: 14,
+    fontFamily: fonts.bodySemiBold,
+    marginBottom: 4,
+  },
+  errorOverlaySubtext: {
+    color: '#FFFFFF',
+    fontSize: 12,
+    fontFamily: fonts.body,
+  },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -716,16 +773,14 @@ const styles = StyleSheet.create({
     flex: 1, // Allows the scroll area to give space to the keyboard
   },
   scrollableContentContainer: {
-    paddingBottom: 100, // Extra padding so content isn't hidden behind input when keyboard is up
+    paddingBottom: 20,
   },
   // Input sits outside the ScrollView but inside the KAV
   bottomInputWrapper: {
     backgroundColor: '#1A202C',
     borderTopWidth: 1,
     borderTopColor: '#2D3748',
-    // Ensures the input stays above the iOS Home Indicator and Android navigation bar
-    paddingBottom: Platform.OS === 'ios' ? 25 : 15,
-    paddingTop: Platform.OS === 'android' ? 8 : 0,
+    paddingTop: 10,
   },
   descriptionContainer: {
     padding: 16,
@@ -858,6 +913,15 @@ const styles = StyleSheet.create({
   replyItem: {
     flexDirection: 'row',
     marginBottom: 10,
+  },
+  seeMoreButton: {
+    marginTop: 8,
+    paddingVertical: 6,
+  },
+  seeMoreButtonText: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemiBold,
+    color: '#3B82F6',
   },
   replyAvatar: {
     width: 24,
