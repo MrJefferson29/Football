@@ -15,6 +15,8 @@ exports.getHighlights = async (req, res) => {
     const highlights = await Highlight.find(query)
       .populate('comments.userId', 'username avatar')
       .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username')
+      .populate('comments.likedBy', 'username')
       .sort({ createdAt: -1 });
     res.status(200).json({
       success: true,
@@ -35,7 +37,9 @@ exports.getHighlight = async (req, res) => {
   try {
     const highlight = await Highlight.findById(req.params.id)
       .populate('comments.userId', 'username avatar')
-      .populate('comments.replies.userId', 'username avatar');
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username')
+      .populate('comments.likedBy', 'username');
 
     if (!highlight) {
       return res.status(404).json({
@@ -167,7 +171,8 @@ exports.addComment = async (req, res) => {
 
     const updatedHighlight = await Highlight.findById(id)
       .populate('comments.userId', 'username avatar')
-      .populate('comments.replies.userId', 'username avatar');
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username');
 
     res.status(201).json({
       success: true,
@@ -214,7 +219,8 @@ exports.replyToComment = async (req, res) => {
 
     const updatedHighlight = await Highlight.findById(id)
       .populate('comments.userId', 'username avatar')
-      .populate('comments.replies.userId', 'username avatar');
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username');
 
     res.status(201).json({
       success: true,
@@ -234,6 +240,7 @@ exports.replyToComment = async (req, res) => {
 exports.likeComment = async (req, res) => {
   try {
     const { id, commentId } = req.params;
+    const userId = req.user.id;
 
     const highlight = await Highlight.findById(id);
     if (!highlight) {
@@ -251,12 +258,41 @@ exports.likeComment = async (req, res) => {
       });
     }
 
-    comment.likes += 1;
+    // Initialize likedBy array if it doesn't exist
+    if (!comment.likedBy) {
+      comment.likedBy = [];
+    }
+
+    // Check if user already liked this comment
+    const userLikedIndex = comment.likedBy.findIndex(
+      (likedUserId) => likedUserId.toString() === userId.toString()
+    );
+
+    if (userLikedIndex > -1) {
+      // User already liked, so unlike (remove from array and decrement)
+      comment.likedBy.splice(userLikedIndex, 1);
+      comment.likes = Math.max(0, comment.likes - 1);
+    } else {
+      // User hasn't liked, so like (add to array and increment)
+      comment.likedBy.push(userId);
+      comment.likes += 1;
+    }
+
     await highlight.save();
+
+    // Populate the comment with updated data
+    const updatedHighlight = await Highlight.findById(id)
+      .populate('comments.userId', 'username avatar')
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username')
+      .populate('comments.likedBy', 'username');
+
+    // Find the updated comment
+    const updatedComment = updatedHighlight.comments.id(commentId);
 
     res.status(200).json({
       success: true,
-      data: highlight
+      data: updatedComment
     });
   } catch (error) {
     res.status(500).json({

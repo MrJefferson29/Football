@@ -54,6 +54,7 @@ exports.getLiveMatches = async (req, res) => {
     const matches = await LiveMatch.find(query)
       .populate('comments.userId', 'username avatar')
       .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username')
       .sort({ matchDate: -1 });
 
     // Update isLive status and add status field based on date/time
@@ -106,6 +107,7 @@ exports.getCurrentMatch = async (req, res) => {
     const allMatches = await LiveMatch.find({ matchDate: { $exists: true, $ne: null } })
       .populate('comments.userId', 'username avatar')
       .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username')
       .sort({ matchDate: -1 });
 
     let selectedMatch = null;
@@ -213,7 +215,8 @@ exports.getLiveMatch = async (req, res) => {
   try {
     const match = await LiveMatch.findById(req.params.id)
       .populate('comments.userId', 'username avatar')
-      .populate('comments.replies.userId', 'username avatar');
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username');
 
     if (!match) {
       return res.status(404).json({
@@ -328,7 +331,8 @@ exports.addComment = async (req, res) => {
 
     const updatedMatch = await LiveMatch.findById(id)
       .populate('comments.userId', 'username avatar')
-      .populate('comments.replies.userId', 'username avatar');
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username');
 
     // Emit socket event
     const io = req.app.get('io');
@@ -384,7 +388,8 @@ exports.replyToComment = async (req, res) => {
 
     const updatedMatch = await LiveMatch.findById(id)
       .populate('comments.userId', 'username avatar')
-      .populate('comments.replies.userId', 'username avatar');
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username');
 
     res.status(201).json({
       success: true,
@@ -404,6 +409,7 @@ exports.replyToComment = async (req, res) => {
 exports.likeComment = async (req, res) => {
   try {
     const { id, commentId } = req.params;
+    const userId = req.user.id;
 
     const match = await LiveMatch.findById(id);
     if (!match) {
@@ -421,12 +427,41 @@ exports.likeComment = async (req, res) => {
       });
     }
 
-    comment.likes += 1;
+    // Initialize likedBy array if it doesn't exist
+    if (!comment.likedBy) {
+      comment.likedBy = [];
+    }
+
+    // Check if user already liked this comment
+    const userLikedIndex = comment.likedBy.findIndex(
+      (likedUserId) => likedUserId.toString() === userId.toString()
+    );
+
+    if (userLikedIndex > -1) {
+      // User already liked, so unlike (remove from array and decrement)
+      comment.likedBy.splice(userLikedIndex, 1);
+      comment.likes = Math.max(0, comment.likes - 1);
+    } else {
+      // User hasn't liked, so like (add to array and increment)
+      comment.likedBy.push(userId);
+      comment.likes += 1;
+    }
+
     await match.save();
+
+    // Populate the match with updated data
+    const updatedMatch = await LiveMatch.findById(id)
+      .populate('comments.userId', 'username avatar')
+      .populate('comments.replies.userId', 'username avatar')
+      .populate('comments.likedBy', 'username')
+      .populate('comments.likedBy', 'username');
+
+    // Find the updated comment
+    const updatedComment = updatedMatch.comments.id(commentId);
 
     res.status(200).json({
       success: true,
-      data: match
+      data: updatedComment
     });
   } catch (error) {
     res.status(500).json({

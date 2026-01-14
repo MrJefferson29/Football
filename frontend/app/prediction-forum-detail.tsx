@@ -1,6 +1,6 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router, useLocalSearchParams } from 'expo-router';
-import React, { useState, useEffect, useRef } from 'react';
+import { router, useLocalSearchParams, useFocusEffect } from 'expo-router';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -38,28 +38,38 @@ export default function PredictionForumDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [mergedItems, setMergedItems] = useState<any[]>([]);
   const [showForumInfo, setShowForumInfo] = useState(false);
-  const lastRefreshRef = useRef<string>('');
+  const lastFetchTimeRef = useRef<number>(0);
 
   useEffect(() => {
     if (id) {
       fetchForum();
       fetchPredictions();
       fetchMessages();
+      lastFetchTimeRef.current = Date.now();
     }
   }, [id]);
 
-  // Refresh predictions when refresh param changes (triggered when returning from create screen)
-  useEffect(() => {
-    if (refresh && refresh !== lastRefreshRef.current && id) {
-      lastRefreshRef.current = refresh as string;
-      fetchPredictions();
-      fetchMessages();
-      // Scroll to bottom to show new prediction
-      setTimeout(() => {
-        flatListRef.current?.scrollToEnd({ animated: true });
-      }, 300);
-    }
-  }, [refresh, id]);
+  // Refresh predictions and messages when screen comes into focus
+  // This ensures new predictions appear immediately after creation
+  useFocusEffect(
+    useCallback(() => {
+      if (id) {
+        // Only refresh if it's been more than 1 second since last fetch
+        // This prevents unnecessary refreshes on initial load
+        const now = Date.now();
+        if (now - lastFetchTimeRef.current > 1000) {
+          fetchPredictions();
+          fetchMessages();
+          lastFetchTimeRef.current = now;
+          
+          // Scroll to bottom after a short delay to show new content
+          setTimeout(() => {
+            flatListRef.current?.scrollToEnd({ animated: true });
+          }, 500);
+        }
+      }
+    }, [id])
+  );
 
   // Merge and sort predictions and messages by date
   useEffect(() => {

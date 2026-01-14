@@ -249,31 +249,38 @@ export default function VideoDetail() {
   };
 
   const handleLikeComment = async (commentId) => {
-    if (!highlight) return;
+    if (!highlight || !user) return;
 
     // Find the comment to update
     const comment = highlight.comments.find(c => c._id === commentId);
     if (!comment) return;
 
-    const wasLiked = comment.likedBy?.some(id => 
-      (typeof id === 'string' ? id : id._id || id) === user?._id
-    ) || false;
-    const newLikes = wasLiked ? (comment.likes || 0) - 1 : (comment.likes || 0) + 1;
+    // Check if user already liked this comment
+    const wasLiked = comment.likedBy?.some(id => {
+      const idValue = typeof id === 'string' ? id : (id?._id || id);
+      const userIdValue = typeof user._id === 'string' ? user._id : (user._id?._id || user._id);
+      return idValue === userIdValue;
+    }) || false;
+    
+    const newLikes = wasLiked ? Math.max(0, (comment.likes || 0) - 1) : (comment.likes || 0) + 1;
 
     // Optimistic update
     setHighlight(prev => {
       if (!prev) return prev;
       const updatedComments = prev.comments.map(c => {
         if (c._id === commentId) {
+          const currentLikedBy = c.likedBy || [];
+          const userIdValue = typeof user._id === 'string' ? user._id : (user._id?._id || user._id);
+          
           return {
             ...c,
             likes: newLikes,
             likedBy: wasLiked 
-              ? (c.likedBy || []).filter(id => {
-                  const idValue = typeof id === 'string' ? id : id._id || id;
-                  return idValue !== user?._id;
+              ? currentLikedBy.filter(id => {
+                  const idValue = typeof id === 'string' ? id : (id?._id || id);
+                  return idValue !== userIdValue;
                 })
-              : [...(c.likedBy || []), user?._id]
+              : [...currentLikedBy, user._id]
           };
         }
         return c;
@@ -289,7 +296,14 @@ export default function VideoDetail() {
           if (!prev) return prev;
           const updatedComments = prev.comments.map(c => {
             if (c._id === commentId) {
-              return response.data;
+              // Merge server response with existing comment data
+              return {
+                ...c,
+                ...response.data,
+                // Ensure we preserve other fields
+                userId: c.userId,
+                replies: c.replies
+              };
             }
             return c;
           });
