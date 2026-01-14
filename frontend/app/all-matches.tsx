@@ -19,13 +19,52 @@ export default function AllMatchesScreen() {
     fetchMatches();
   }, []);
 
+  // Helper function to check if a match is scheduled for today
+  const isMatchToday = (match: any): boolean => {
+    if (!match.matchDate) {
+      return false;
+    }
+
+    try {
+      let matchDateObj: Date;
+      if (match.matchDate instanceof Date) {
+        matchDateObj = new Date(match.matchDate.getTime());
+      } else if (typeof match.matchDate === 'string') {
+        // Extract just the date part (YYYY-MM-DD) and create a local date
+        const dateStr = match.matchDate.split('T')[0];
+        const [year, month, day] = dateStr.split('-').map(Number);
+        matchDateObj = new Date(year, month - 1, day);
+      } else {
+        matchDateObj = new Date(match.matchDate);
+      }
+
+      const today = new Date();
+      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+      const matchDateStr = `${matchDateObj.getFullYear()}-${String(matchDateObj.getMonth() + 1).padStart(2, '0')}-${String(matchDateObj.getDate()).padStart(2, '0')}`;
+
+      return matchDateStr === todayStr;
+    } catch (error) {
+      console.error('Error checking match date:', error);
+      return false;
+    }
+  };
+
+  // Helper function to check if a match is finished
+  const isMatchFinished = (match: any): boolean => {
+    return match.status === 'finished' || 
+           (match.homeScore !== null && match.homeScore !== undefined && 
+            match.awayScore !== null && match.awayScore !== undefined);
+  };
+
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      // Fetch all matches (not just today's)
-      const response = await matchesAPI.getMatches();
+      // Fetch only today's matches
+      const response = await matchesAPI.getTodayMatches();
       if (response.success) {
-        setAllMatches(response.data);
+        // Filter to ensure only today's matches are shown (safety check)
+        const todayMatches = response.data.filter((match: any) => isMatchToday(match));
+        setAllMatches(todayMatches);
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load matches');
@@ -91,47 +130,73 @@ export default function AllMatchesScreen() {
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
           {allMatches.length > 0 ? (
-            allMatches.map((match: any) => (
-              <TouchableOpacity 
-                key={match._id || match.id} 
-                style={styles.matchCard}
-                onPress={() => handleMatchVote(match._id || match.id)}
-              >
-                <View style={styles.matchHeader}>
-                  <Text style={styles.leagueName}>{match.league || 'Other'}</Text>
-                  <Text style={styles.matchTime}>{match.matchTime}</Text>
-                </View>
-                
-                <View style={styles.matchTeams}>
-                  <View style={styles.teamContainer}>
-                    <Image 
-                      source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
-                      style={styles.teamLogo}
-                      onError={(e) => {
-                        console.log('Image load error:', match.homeLogo);
-                      }}
-                    />
-                    <Text style={styles.teamName}>{match.homeTeam}</Text>
+            allMatches.map((match: any) => {
+              const isFinished = isMatchFinished(match);
+              const hasScore = match.homeScore !== null && match.homeScore !== undefined && 
+                              match.awayScore !== null && match.awayScore !== undefined;
+              
+              return (
+                <TouchableOpacity 
+                  key={match._id || match.id} 
+                  style={[
+                    styles.matchCard,
+                    isFinished && styles.matchCardFinished
+                  ]}
+                  onPress={() => !isFinished && handleMatchVote(match._id || match.id)}
+                  disabled={isFinished}
+                >
+                  <View style={styles.matchHeader}>
+                    <Text style={styles.leagueName}>{match.league || 'Other'}</Text>
+                    <View style={styles.matchTimeContainer}>
+                      {isFinished ? (
+                        <View style={styles.finishedBadge}>
+                          <Text style={styles.finishedText}>Finished</Text>
+                        </View>
+                      ) : (
+                        <Text style={styles.matchTime}>{match.matchTime}</Text>
+                      )}
+                    </View>
                   </View>
                   
-                  <View style={styles.vsContainer}>
-                    <Text style={styles.vsText}>VS</Text>
-                    <Text style={styles.voteText}>Tap to vote</Text>
+                  <View style={styles.matchTeams}>
+                    <View style={styles.teamContainer}>
+                      <Image 
+                        source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
+                        style={styles.teamLogo}
+                        onError={(e) => {
+                          console.log('Image load error:', match.homeLogo);
+                        }}
+                      />
+                      <Text style={styles.teamName}>{match.homeTeam}</Text>
+                    </View>
+                    
+                    <View style={styles.vsContainer}>
+                      {hasScore ? (
+                        <Text style={styles.scoreText}>
+                          {match.homeScore} - {match.awayScore}
+                        </Text>
+                      ) : (
+                        <>
+                          <Text style={styles.vsText}>VS</Text>
+                          {!isFinished && <Text style={styles.voteText}>Tap to vote</Text>}
+                        </>
+                      )}
+                    </View>
+                    
+                    <View style={styles.teamContainer}>
+                      <Text style={styles.teamName}>{match.awayTeam}</Text>
+                      <Image 
+                        source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
+                        style={styles.teamLogo}
+                        onError={(e) => {
+                          console.log('Image load error:', match.awayLogo);
+                        }}
+                      />
+                    </View>
                   </View>
-                  
-                  <View style={styles.teamContainer}>
-                    <Text style={styles.teamName}>{match.awayTeam}</Text>
-                    <Image 
-                      source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
-                      style={styles.teamLogo}
-                      onError={(e) => {
-                        console.log('Image load error:', match.awayLogo);
-                      }}
-                    />
-                  </View>
-                </View>
-              </TouchableOpacity>
-            ))
+                </TouchableOpacity>
+              );
+            })
           ) : (
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>No matches scheduled for today</Text>
@@ -189,6 +254,12 @@ const styles = StyleSheet.create({
     padding: 20,
     marginBottom: 15,
   },
+  matchCardFinished: {
+    backgroundColor: '#2D2A2A',
+    borderWidth: 1,
+    borderColor: '#4A2E2E',
+    opacity: 0.8,
+  },
   matchHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -200,10 +271,30 @@ const styles = StyleSheet.create({
     fontFamily: fonts.bodyMedium,
     color: '#3B82F6',
   },
+  matchTimeContainer: {
+    alignItems: 'flex-end',
+  },
   matchTime: {
     fontSize: 14,
     fontFamily: fonts.body,
     color: '#9CA3AF',
+  },
+  finishedBadge: {
+    backgroundColor: '#EF4444',
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 6,
+  },
+  finishedText: {
+    fontSize: 12,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+  },
+  scoreText: {
+    fontSize: 18,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFFFFF',
+    marginBottom: 4,
   },
   matchTeams: {
     flexDirection: 'row',

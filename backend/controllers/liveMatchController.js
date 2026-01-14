@@ -17,12 +17,34 @@ const checkIfMatchIsLive = (matchDate, matchTime) => {
   return now >= matchDateTime;
 };
 
+// Helper function to determine match status
+const getMatchStatus = (matchDate, matchTime) => {
+  if (!matchDate) return 'finished';
+  
+  const now = new Date();
+  const oneHundredMinutesAgo = new Date(now.getTime() - 100 * 60 * 1000);
+  const matchDateTime = new Date(matchDate);
+  
+  if (matchTime) {
+    const [hours, minutes] = matchTime.split(':').map(Number);
+    matchDateTime.setHours(hours, minutes, 0, 0);
+  }
+  
+  if (matchDateTime > now) {
+    return 'upcoming';
+  } else if (matchDateTime >= oneHundredMinutesAgo && matchDateTime <= now) {
+    return 'live';
+  } else {
+    return 'finished';
+  }
+};
+
 // @desc    Get all live matches
 // @route   GET /api/live-matches
 // @access  Public
 exports.getLiveMatches = async (req, res) => {
   try {
-    const { isLive } = req.query;
+    const { isLive, status } = req.query;
     let query = {};
 
     if (isLive !== undefined) {
@@ -34,7 +56,7 @@ exports.getLiveMatches = async (req, res) => {
       .populate('comments.replies.userId', 'username avatar')
       .sort({ matchDate: -1 });
 
-    // Update isLive status based on date/time
+    // Update isLive status and add status field based on date/time
     const updatedMatches = matches.map(match => {
       // Only check if match has a date
       if (match.matchDate) {
@@ -47,12 +69,22 @@ exports.getLiveMatches = async (req, res) => {
           });
         }
       }
-      return match;
+      
+      // Add status field
+      const matchObj = match.toObject();
+      matchObj.status = getMatchStatus(match.matchDate, match.matchTime);
+      return matchObj;
     });
+
+    // Filter by status if provided
+    let filteredMatches = updatedMatches;
+    if (status) {
+      filteredMatches = updatedMatches.filter(match => match.status === status);
+    }
 
     res.status(200).json({
       success: true,
-      data: updatedMatches
+      data: filteredMatches
     });
   } catch (error) {
     res.status(500).json({
@@ -199,9 +231,13 @@ exports.getLiveMatch = async (req, res) => {
       }
     }
 
+    // Add status field
+    const matchData = match.toObject();
+    matchData.status = getMatchStatus(match.matchDate, match.matchTime);
+
     res.status(200).json({
       success: true,
-      data: match
+      data: matchData
     });
   } catch (error) {
     res.status(500).json({

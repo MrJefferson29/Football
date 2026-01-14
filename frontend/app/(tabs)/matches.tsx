@@ -305,7 +305,7 @@ export default function MatchesScreen() {
         <View style={styles.header}>
           <Text style={styles.headerTitle}>Leagues & Matches</Text>
           <View>
-            <TouchableOpacity style={styles.liveMatchButton} onPress={() => router.navigate('/live-matches')}>
+            <TouchableOpacity style={styles.liveMatchButton} onPress={() => router.navigate('/all-live-matches')}>
               <Text style={styles.liveMatchText}>Live</Text>
               <Ionicons name="tv-outline" size={16} color="red" />
             </TouchableOpacity>

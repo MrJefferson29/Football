@@ -191,13 +191,19 @@ export default function CreatePredictionScreen() {
         additionalInfo: formData.additionalInfo.trim() || undefined
       });
 
-      if (response.success) {
-        Alert.alert('Success', 'Prediction created successfully!', [
-          {
-            text: 'OK',
-            onPress: () => router.back()
+      if (response.success && response.data) {
+        // Navigate back with refresh param to trigger refresh in forum detail screen
+        router.push({
+          pathname: '/prediction-forum-detail',
+          params: { 
+            id: forumId as string,
+            refresh: Date.now().toString() 
           }
-        ]);
+        });
+        // Show success message after a brief delay
+        setTimeout(() => {
+          Alert.alert('Success', 'Prediction created successfully!');
+        }, 300);
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to create prediction');

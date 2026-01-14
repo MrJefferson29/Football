@@ -23,7 +23,7 @@ import { useAuth } from '@/contexts/AuthContext';
 import * as ImagePicker from 'expo-image-picker';
 
 export default function PredictionForumDetailScreen() {
-  const { id } = useLocalSearchParams();
+  const { id, refresh } = useLocalSearchParams();
   const { user } = useAuth();
   const [forum, setForum] = useState<any>(null);
   const [predictions, setPredictions] = useState<any[]>([]);
@@ -38,6 +38,7 @@ export default function PredictionForumDetailScreen() {
   const flatListRef = useRef<FlatList>(null);
   const [mergedItems, setMergedItems] = useState<any[]>([]);
   const [showForumInfo, setShowForumInfo] = useState(false);
+  const lastRefreshRef = useRef<string>('');
 
   useEffect(() => {
     if (id) {
@@ -46,6 +47,19 @@ export default function PredictionForumDetailScreen() {
       fetchMessages();
     }
   }, [id]);
+
+  // Refresh predictions when refresh param changes (triggered when returning from create screen)
+  useEffect(() => {
+    if (refresh && refresh !== lastRefreshRef.current && id) {
+      lastRefreshRef.current = refresh as string;
+      fetchPredictions();
+      fetchMessages();
+      // Scroll to bottom to show new prediction
+      setTimeout(() => {
+        flatListRef.current?.scrollToEnd({ animated: true });
+      }, 300);
+    }
+  }, [refresh, id]);
 
   // Merge and sort predictions and messages by date
   useEffect(() => {
@@ -926,6 +940,7 @@ const styles = StyleSheet.create({
     alignItems: 'flex-end',
     gap: 8,
     paddingHorizontal: 4,
+    marginBottom: 30,
   },
   imageButton: {
     padding: 8,

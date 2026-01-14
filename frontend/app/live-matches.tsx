@@ -76,6 +76,7 @@ interface LiveMatch {
 export default function LiveMatchScreen() {
   const { user } = useAuth()
   const { getCacheData, setCacheData } = useDataCache()
+  const { matchId } = useLocalSearchParams()
   const [match, setMatch] = useState<LiveMatch | null>(null)
   const [loading, setLoading] = useState(true)
   const [newComment, setNewComment] = useState("")
@@ -89,7 +90,7 @@ export default function LiveMatchScreen() {
 
   useEffect(() => {
     fetchMatch()
-  }, [])
+  }, [matchId])
 
   useEffect(() => {
     if (match) {
@@ -127,39 +128,52 @@ export default function LiveMatchScreen() {
   }, [match?._id])
 
   const fetchMatch = async () => {
-    // First check cache
-    const cachedData = getCacheData('currentLiveMatch');
-    if (cachedData) {
-      setMatch(cachedData);
-      setIsMatchLive(cachedData.isLive || cachedData.status === 'live');
-      setMatchStatus(cachedData.status || 'finished');
-      setLoading(false);
-    }
-
-    // Refresh in background
     try {
       setLoading(true);
-      const response = await liveMatchesAPI.getCurrentMatch();
-      if (response.success) {
-        if (response.data) {
-          setCacheData('currentLiveMatch', response.data);
-          setMatch(response.data);
-          setIsMatchLive(response.data.isLive || response.data.status === 'live');
-          setMatchStatus(response.data.status || 'finished');
+      
+      // If matchId is provided, fetch that specific match
+      if (matchId && typeof matchId === 'string') {
+        const response = await liveMatchesAPI.getLiveMatch(matchId);
+        if (response.success) {
+          if (response.data) {
+            setMatch(response.data);
+            setIsMatchLive(response.data.isLive || response.data.status === 'live');
+            setMatchStatus(response.data.status || 'finished');
+          } else {
+            setMatch(null);
+          }
         } else {
-          // No match available
-          setMatch(null);
+          Alert.alert('Error', response.message || 'Failed to load live match');
         }
       } else {
-        if (!cachedData) {
-          Alert.alert('Error', response.message || 'Failed to load live match');
+        // Fallback to current match if no matchId provided
+        const cachedData = getCacheData('currentLiveMatch');
+        if (cachedData) {
+          setMatch(cachedData);
+          setIsMatchLive(cachedData.isLive || cachedData.status === 'live');
+          setMatchStatus(cachedData.status || 'finished');
+          setLoading(false);
+        }
+
+        const response = await liveMatchesAPI.getCurrentMatch();
+        if (response.success) {
+          if (response.data) {
+            setCacheData('currentLiveMatch', response.data);
+            setMatch(response.data);
+            setIsMatchLive(response.data.isLive || response.data.status === 'live');
+            setMatchStatus(response.data.status || 'finished');
+          } else {
+            setMatch(null);
+          }
+        } else {
+          if (!cachedData) {
+            Alert.alert('Error', response.message || 'Failed to load live match');
+          }
         }
       }
     } catch (error: any) {
       console.error('Error fetching match:', error);
-      if (!cachedData) {
-        Alert.alert('Error', error.message || 'Failed to load live match');
-      }
+      Alert.alert('Error', error.message || 'Failed to load live match');
     } finally {
       setLoading(false);
     }
