@@ -90,7 +90,6 @@ export default function AllMatchesScreen() {
     }
   };
 
-<<<<<<< HEAD
   const handleVote = async (matchId: string, prediction: 'home' | 'draw' | 'away', homeScore?: number, awayScore?: number) => {
     try {
       setIsLoading(true);
@@ -103,33 +102,6 @@ export default function AllMatchesScreen() {
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to vote');
-=======
-  const handleVote = async (
-    matchId: string,
-    prediction: 'home' | 'draw' | 'away',
-    homeScore: number,
-    awayScore: number,
-    amount: number
-  ) => {
-    try {
-      setIsLoading(true);
-      const response = await matchesAPI.joinMatchPool(matchId, {
-        amount,
-        prediction,
-        homeScore,
-        awayScore,
-      });
-      if (response.success) {
-        Alert.alert('Bet Placed!', 'Your bet has been placed in a pool.');
-        setShowVotingModal(false);
-        setSelectedMatch(null);
-        await fetchMatches();
-      } else {
-        Alert.alert('Error', response.message || 'Failed to place bet');
-      }
-    } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to place bet');
->>>>>>> 783ee88 (Your descriptive commit message here)
     } finally {
       setIsLoading(false);
     }
