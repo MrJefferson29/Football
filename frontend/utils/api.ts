@@ -221,8 +221,6 @@ export const matchesAPI = {
       body: JSON.stringify({ prediction, homeScore, awayScore }),
     });
   },
-<<<<<<< HEAD
-=======
   getMatchPools: async (id: string, amount?: number) => {
     const params = new URLSearchParams();
     if (amount) {
@@ -243,7 +241,6 @@ export const matchesAPI = {
       body: JSON.stringify(data),
     });
   },
->>>>>>> 783ee88 (Your descriptive commit message here)
 };
 
 // Highlights API

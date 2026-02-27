@@ -29,11 +29,6 @@ interface VotingModalProps {
     time?: string;
     score?: string;
   };
-<<<<<<< HEAD
-  onVote: (matchId: string, prediction: 'home' | 'draw' | 'away', homeScore?: number, awayScore?: number) => Promise<void>;
-}
-
-=======
   onVote: (
     matchId: string,
     prediction: 'home' | 'draw' | 'away',
@@ -45,7 +40,6 @@ interface VotingModalProps {
 
 const BET_AMOUNTS = [1000, 2000, 5000, 10000, 50000, 100000];
 
->>>>>>> 783ee88 (Your descriptive commit message here)
 export default function VotingModal({ visible, onClose, match, onVote }: VotingModalProps) {
   const [homeScore, setHomeScore] = useState('');
   const [awayScore, setAwayScore] = useState('');

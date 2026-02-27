@@ -29,11 +29,8 @@ export const API_ENDPOINTS = {
     BY_ID: (id: string) => `${API_BASE_URL}/matches/${id}`,
     VOTE: (id: string) => `${API_BASE_URL}/matches/${id}/vote`,
     SCORE: (id: string) => `${API_BASE_URL}/matches/${id}/score`,
-<<<<<<< HEAD
-=======
     POOLS: (id: string) => `${API_BASE_URL}/matches/${id}/pools`,
     JOIN_POOL: (id: string) => `${API_BASE_URL}/matches/${id}/pools/join`,
->>>>>>> 783ee88 (Your descriptive commit message here)
   },
   // Highlights
   HIGHLIGHTS: {
