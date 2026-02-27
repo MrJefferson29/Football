@@ -1,0 +1,15 @@
+{
+  "expo": {
+    "extra": {
+      "eas": {
+        "projectId": "da0e848a-668f-41f0-81a3-37ec27fdaf47"
+      }
+    },
+    "android": {
+      "package": "com.j.f.s.n.football",
+      "softwareKeyboardLayoutMode": "resize"
+    },
+    "owner": "j.f.s.n",
+    "slug": "football"
+  }
+}
