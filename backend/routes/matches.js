@@ -7,7 +7,9 @@ const {
   getMatch,
   createMatch,
   voteMatch,
-  updateMatchScore
+  updateMatchScore,
+  getMatchPools,
+  joinMatchPool
 } = require('../controllers/matchController');
 const { protect, authorize } = require('../middleware/auth');
 
@@ -18,6 +20,8 @@ router.get('/', getMatches);
 router.post('/', protect, authorize('admin'), createMatch);
 router.post('/:id/vote', protect, voteMatch);
 router.put('/:id/score', protect, authorize('admin'), updateMatchScore);
+router.get('/:id/pools', protect, getMatchPools);
+router.post('/:id/pools/join', protect, joinMatchPool);
 
 module.exports = router;
 

@@ -1,8 +1,5 @@
 const Match = require('../models/Match');
-<<<<<<< HEAD
-=======
 const MatchBetPool = require('../models/MatchBetPool');
->>>>>>> 783ee88 (Your descriptive commit message here)
 
 // @desc    Get all matches
 // @route   GET /api/matches
@@ -545,8 +542,6 @@ exports.updateMatchScore = async (req, res) => {
   }
 };
 
-<<<<<<< HEAD
-=======
 // @desc    Get betting pools for a match (optionally filtered by amount)
 // @route   GET /api/matches/:id/pools
 // @access  Private (requires auth to see pools)
@@ -733,4 +728,3 @@ exports.joinMatchPool = async (req, res) => {
 };
 
 
->>>>>>> 783ee88 (Your descriptive commit message here)
