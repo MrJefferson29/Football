@@ -683,15 +683,22 @@ exports.joinMatchPool = async (req, res) => {
     // - same match and amount
     // - not closed
     // - has at least one participant (so you are joining an existing pool)
-    // - does not already contain this prediction
+    // - has at least one participant whose prediction is different from this user's
     // - has fewer than 3 participants
-    let pool = await MatchBetPool.findOne({
+    const candidatePools = await MatchBetPool.find({
       match: id,
       amount: numericAmount,
       isClosed: false,
-      $where: 'this.participants.length > 0 && this.participants.length < 3',
-      'participants.prediction': { $ne: prediction },
-    });
+    }).sort({ createdAt: 1 });
+
+    let pool =
+      candidatePools.find(
+        (p) =>
+          Array.isArray(p.participants) &&
+          p.participants.length > 0 &&
+          p.participants.length < 3 &&
+          p.participants.some((part) => part.prediction !== prediction)
+      ) || null;
 
     // If none found, create a fresh pool with this user as first participant
     if (!pool) {
