@@ -1,7 +1,54 @@
 const mongoose = require('mongoose');
 
+const POOL_NAME_PREFIXES = [
+  'Diamond',
+  'Golden',
+  'Silver',
+  'Royal',
+  'Rocket',
+  'Turbo',
+  'Legend',
+  'Ultra',
+  'Prime',
+  'Fusion',
+  'Galaxy',
+  'Phoenix',
+  'Dragon',
+  'Neon',
+  'Emerald',
+];
+
+const POOL_NAME_SUFFIXES = [
+  'Pool',
+  'Squad',
+  'Club',
+  'Arena',
+  'League',
+  'Circle',
+  'Zone',
+  'Lobby',
+  'Room',
+  'Hub',
+  'Den',
+  'House',
+  'Lounge',
+  'Corner',
+  'Bet',
+];
+
+function generatePoolName() {
+  const prefix = POOL_NAME_PREFIXES[Math.floor(Math.random() * POOL_NAME_PREFIXES.length)];
+  const suffix = POOL_NAME_SUFFIXES[Math.floor(Math.random() * POOL_NAME_SUFFIXES.length)];
+  return `${prefix} ${suffix}`;
+}
+
 const matchBetPoolSchema = new mongoose.Schema(
   {
+    name: {
+      type: String,
+      default: generatePoolName,
+      trim: true,
+    },
     match: {
       type: mongoose.Schema.Types.ObjectId,
       ref: 'Match',

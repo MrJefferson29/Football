@@ -542,13 +542,14 @@ exports.updateMatchScore = async (req, res) => {
   }
 };
 
-// @desc    Get betting pools for a match (optionally filtered by amount)
+// @desc    Get betting pools for a match
+//          Can be filtered by amount and prediction to return only candidate pools
 // @route   GET /api/matches/:id/pools
 // @access  Private (requires auth to see pools)
 exports.getMatchPools = async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount } = req.query;
+    const { amount, prediction, onlyCandidates } = req.query;
 
     const match = await Match.findById(id);
     if (!match) {
@@ -559,13 +560,33 @@ exports.getMatchPools = async (req, res) => {
     }
 
     const query = { match: id };
+
     if (amount) {
       query.amount = Number(amount);
     }
 
-    const pools = await MatchBetPool.find(query)
+    // When searching for candidate pools for a specific prediction:
+    // - Only open pools (isClosed: false)
+    // - With at least one participant (someone already staked)
+    // - Not full yet (participants.length < 3)
+    if (onlyCandidates === 'true' && prediction) {
+      query.isClosed = false;
+      query.$where = 'this.participants && this.participants.length > 0 && this.participants.length < 3';
+    }
+
+    let poolsQuery = MatchBetPool.find(query)
       .populate('participants.user', 'username avatar')
       .sort({ createdAt: 1 });
+
+    // Ensure there is at least one user in the pool whose prediction
+    // is different from the current user's prediction
+    if (onlyCandidates === 'true' && prediction) {
+      poolsQuery = poolsQuery.where('participants').elemMatch({
+        prediction: { $ne: prediction },
+      });
+    }
+
+    const pools = await poolsQuery;
 
     res.status(200).json({
       success: true,

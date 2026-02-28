@@ -221,15 +221,22 @@ export const matchesAPI = {
       body: JSON.stringify({ prediction, homeScore, awayScore }),
     });
   },
-  getMatchPools: async (id: string, amount?: number) => {
-    const params = new URLSearchParams();
-    if (amount) {
-      params.append('amount', amount.toString());
+  getMatchPools: async (
+    id: string,
+    params?: { amount?: number; prediction?: 'home' | 'draw' | 'away'; onlyCandidates?: boolean }
+  ) => {
+    const queryParams = new URLSearchParams();
+    if (params?.amount) {
+      queryParams.append('amount', params.amount.toString());
     }
-    const query = params.toString();
-    const url = query
-      ? `${API_ENDPOINTS.MATCHES.POOLS(id)}?${query}`
-      : API_ENDPOINTS.MATCHES.POOLS(id);
+    if (params?.prediction) {
+      queryParams.append('prediction', params.prediction);
+    }
+    if (params?.onlyCandidates) {
+      queryParams.append('onlyCandidates', 'true');
+    }
+    const query = queryParams.toString();
+    const url = query ? `${API_ENDPOINTS.MATCHES.POOLS(id)}?${query}` : API_ENDPOINTS.MATCHES.POOLS(id);
     return apiRequest(url);
   },
   joinMatchPool: async (

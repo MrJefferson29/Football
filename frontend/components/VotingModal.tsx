@@ -53,7 +53,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
     const [awayScore, setAwayScore] = useState('');
     const [isLoading, setIsLoading] = useState(false);
     const [autoSelectedPrediction, setAutoSelectedPrediction] = useState<'home' | 'draw' | 'away' | null>(null);
-    const [selectedRange, setSelectedRange] = useState<typeof PRICE_RANGES | null>(null);
+    const [selectedRange, setSelectedRange] = useState<{ label: string; amount: number } | null>(null);
     const [pools, setPools] = useState<any[]>([]);
     const [poolsLoading, setPoolsLoading] = useState(false);
 
@@ -74,20 +74,31 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
         if (!visible) {
             setHomeScore('');
             setAwayScore('');
+            setAutoSelectedPrediction(null);
             setSelectedRange(null);
             setPools([]);
         }
     }, [visible]);
 
+    // Fetch matching pools when we have both a selected range and a prediction
     useEffect(() => {
-        if (!visible || !selectedRange) return;
+        if (!visible || !selectedRange || !autoSelectedPrediction) {
+            setPools([]);
+            return;
+        }
+
         const matchId = match._id || String(match.id);
         setPoolsLoading(true);
-        matchesAPI.getMatchPools(matchId, selectedRange.amount)
-            .then((res) => setPools(res.success ? res.data : []))
+        matchesAPI
+            .getMatchPools(matchId, {
+                amount: selectedRange.amount,
+                prediction: autoSelectedPrediction,
+                onlyCandidates: true,
+            })
+            .then((res) => setPools(res.success && Array.isArray(res.data) ? res.data : []))
             .catch(() => setPools([]))
             .finally(() => setPoolsLoading(false));
-    }, [visible, selectedRange, match._id, match.id]);
+    }, [visible, selectedRange, autoSelectedPrediction, match._id, match.id]);
 
     const handleVote = async () => {
         const h = parseInt(homeScore, 10);
@@ -195,13 +206,68 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                             ))}
                         </View>
 
-                        {/* Pool Status Information */}
+                        {/* Pool Status Information & List */}
                         {selectedRange && (
-                            <View style={styles.poolInfoContainer}>
-                                <Ionicons name="people-circle-outline" size={16} color="#10B981" />
-                                <Text style={styles.poolInfoText}>
-                                    {poolsLoading ? 'Checking pools...' : `${pools.filter(p => !p.isClosed).length} active pools found`}
-                                </Text>
+                            <View style={styles.poolInfoSection}>
+                                <View style={styles.poolInfoHeader}>
+                                    <Ionicons name="people-circle-outline" size={16} color="#10B981" />
+                                    <Text style={styles.poolInfoText}>
+                                        {poolsLoading
+                                            ? 'Searching pools...'
+                                            : `${pools.length} matching pool${pools.length === 1 ? '' : 's'} found`}
+                                    </Text>
+                                </View>
+
+                                {!poolsLoading && pools.length > 0 && (
+                                    <View style={styles.poolList}>
+                                        {pools.map((pool) => (
+                                            <View key={pool._id} style={styles.poolCard}>
+                                                <View style={styles.poolCardHeader}>
+                                                    <Text style={styles.poolName} numberOfLines={1}>
+                                                        {pool.name || 'Prediction Pool'}
+                                                    </Text>
+                                                    <Text style={styles.poolStatus}>
+                                                        {pool.isClosed ? 'Full' : `Open · ${3 - (pool.participants?.length || 0)} spot(s) left`}
+                                                    </Text>
+                                                </View>
+                                                <View style={styles.poolParticipantsRow}>
+                                                    {(pool.participants || []).map((p: any, idx: number) => (
+                                                        <View key={p.user?._id || idx} style={styles.participantChip}>
+                                                            {p.user?.avatar ? (
+                                                                <Image
+                                                                    source={{ uri: p.user.avatar }}
+                                                                    style={styles.participantAvatar}
+                                                                />
+                                                            ) : (
+                                                                <View style={styles.participantAvatarPlaceholder}>
+                                                                    <Text style={styles.participantAvatarText}>
+                                                                        {p.user?.username?.[0]?.toUpperCase() || '?'}
+                                                                    </Text>
+                                                                </View>
+                                                            )}
+                                                            <Text style={styles.participantName} numberOfLines={1}>
+                                                                {p.user?.username || 'Player'}
+                                                            </Text>
+                                                            <Text style={styles.participantPrediction}>
+                                                                {p.prediction === 'home'
+                                                                    ? 'Home win'
+                                                                    : p.prediction === 'away'
+                                                                    ? 'Away win'
+                                                                    : 'Draw'}
+                                                            </Text>
+                                                        </View>
+                                                    ))}
+
+                                                    {(!pool.participants || pool.participants.length === 0) && (
+                                                        <Text style={styles.emptyParticipantsText}>
+                                                            No players yet. You will open this pool.
+                                                        </Text>
+                                                    )}
+                                                </View>
+                                            </View>
+                                        ))}
+                                    </View>
+                                )}
                             </View>
                         )}
 
@@ -277,8 +343,39 @@ const styles = StyleSheet.create({
     stakeChipActive: { backgroundColor: '#3B82F6', borderColor: '#60A5FA' },
     stakeText: { color: '#9CA3AF', fontWeight: '700', fontSize: 13 },
     stakeTextActive: { color: '#FFF', fontWeight: '800' },
-    poolInfoContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+    poolInfoSection: { marginTop: 12 },
+    poolInfoHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center' },
     poolInfoText: { color: '#10B981', fontSize: 12, fontWeight: '600', marginLeft: 6 },
+    poolList: { marginTop: 10, gap: 8 },
+    poolCard: { backgroundColor: '#111827', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#1F2937' },
+    poolCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+    poolName: { color: '#F9FAFB', fontSize: 13, fontWeight: '700', flex: 1, marginRight: 8 },
+    poolStatus: { color: '#9CA3AF', fontSize: 11 },
+    poolParticipantsRow: { flexDirection: 'row', flexWrap: 'wrap', marginTop: 4 },
+    participantChip: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#1F2937',
+        borderRadius: 999,
+        paddingHorizontal: 8,
+        paddingVertical: 4,
+        marginRight: 6,
+        marginBottom: 6,
+    },
+    participantAvatar: { width: 20, height: 20, borderRadius: 10, marginRight: 6 },
+    participantAvatarPlaceholder: {
+        width: 20,
+        height: 20,
+        borderRadius: 10,
+        backgroundColor: '#4B5563',
+        alignItems: 'center',
+        justifyContent: 'center',
+        marginRight: 6,
+    },
+    participantAvatarText: { color: '#F9FAFB', fontSize: 11, fontWeight: '700' },
+    participantName: { color: '#E5E7EB', fontSize: 11, fontWeight: '600', marginRight: 6, maxWidth: 80 },
+    participantPrediction: { color: '#9CA3AF', fontSize: 10 },
+    emptyParticipantsText: { color: '#9CA3AF', fontSize: 11, fontStyle: 'italic' },
     footer: { marginTop: 30 },
     submitButton: { 
         backgroundColor: '#10B981', 
