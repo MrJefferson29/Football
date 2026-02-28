@@ -567,11 +567,8 @@ exports.getMatchPools = async (req, res) => {
 
     // When searching for candidate pools for a specific prediction:
     // - Only open pools (isClosed: false)
-    // - With at least one participant (someone already staked)
-    // - Not full yet (participants.length < 3)
     if (onlyCandidates === 'true' && prediction) {
       query.isClosed = false;
-      query.$where = 'this.participants && this.participants.length > 0 && this.participants.length < 3';
     }
 
     let poolsQuery = MatchBetPool.find(query)
@@ -588,9 +585,20 @@ exports.getMatchPools = async (req, res) => {
 
     const pools = await poolsQuery;
 
+    // For candidate search, enforce participant-count rules in application code
+    let result = pools;
+    if (onlyCandidates === 'true' && prediction) {
+      result = pools.filter(
+        (p) =>
+          Array.isArray(p.participants) &&
+          p.participants.length > 0 &&
+          p.participants.length < 3
+      );
+    }
+
     res.status(200).json({
       success: true,
-      data: pools,
+      data: result,
     });
   } catch (error) {
     res.status(500).json({
