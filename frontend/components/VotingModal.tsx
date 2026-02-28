@@ -15,591 +15,281 @@ import {
     View,
 } from 'react-native';
 import { getDirectImageUrl } from '@/utils/imageUtils';
+import { matchesAPI } from '@/utils/api';
 
 interface VotingModalProps {
-  visible: boolean;
-  onClose: () => void;
-  match: {
-    id: string | number;
-    _id?: string;
-    homeTeam: string;
-    awayTeam: string;
-    homeLogo: string;
-    awayLogo: string;
-    time?: string;
-    score?: string;
-  };
-  onVote: (
-    matchId: string,
-    prediction: 'home' | 'draw' | 'away',
-    homeScore: number,
-    awayScore: number,
-    amount: number
-  ) => Promise<void>;
+    visible: boolean;
+    onClose: () => void;
+    match: {
+        id: string | number;
+        _id?: string;
+        homeTeam: string;
+        awayTeam: string;
+        homeLogo: string;
+        awayLogo: string;
+        time?: string;
+        score?: string;
+    };
+    onVote: (
+        matchId: string,
+        prediction: 'home' | 'draw' | 'away',
+        homeScore: number,
+        awayScore: number,
+        amount: number
+    ) => Promise<void>;
 }
 
-const BET_AMOUNTS = [1000, 2000, 5000, 10000, 50000, 100000];
+const PRICE_RANGES = [
+    { label: '1K - 2K', amount: 1000 },
+    { label: '2K - 5K', amount: 2000 },
+    { label: '5K - 10K', amount: 5000 },
+    { label: '10K - 50K', amount: 10000 },
+    { label: '50K - 100K', amount: 50000 },
+    { label: '100K+', amount: 100000 },
+];
 
 export default function VotingModal({ visible, onClose, match, onVote }: VotingModalProps) {
-  const [homeScore, setHomeScore] = useState('');
-  const [awayScore, setAwayScore] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [autoSelectedPrediction, setAutoSelectedPrediction] = useState<'home' | 'draw' | 'away' | null>(null);
-<<<<<<< HEAD
-=======
-  const [selectedAmount, setSelectedAmount] = useState<number | null>(null);
->>>>>>> 783ee88 (Your descriptive commit message here)
+    const [homeScore, setHomeScore] = useState('');
+    const [awayScore, setAwayScore] = useState('');
+    const [isLoading, setIsLoading] = useState(false);
+    const [autoSelectedPrediction, setAutoSelectedPrediction] = useState<'home' | 'draw' | 'away' | null>(null);
+    const [selectedRange, setSelectedRange] = useState<typeof PRICE_RANGES | null>(null);
+    const [pools, setPools] = useState<any[]>([]);
+    const [poolsLoading, setPoolsLoading] = useState(false);
 
-  // Auto-determine prediction based on scores
-  useEffect(() => {
-    const homeScoreNum = homeScore ? parseInt(homeScore, 10) : null;
-    const awayScoreNum = awayScore ? parseInt(awayScore, 10) : null;
+    useEffect(() => {
+        const h = homeScore ? parseInt(homeScore, 10) : null;
+        const a = awayScore ? parseInt(awayScore, 10) : null;
 
-    if (homeScoreNum !== null && awayScoreNum !== null && !isNaN(homeScoreNum) && !isNaN(awayScoreNum)) {
-      if (homeScoreNum > awayScoreNum) {
-        setAutoSelectedPrediction('home');
-      } else if (awayScoreNum > homeScoreNum) {
-        setAutoSelectedPrediction('away');
-      } else {
-        setAutoSelectedPrediction('draw');
-      }
-    } else {
-      setAutoSelectedPrediction(null);
-    }
-  }, [homeScore, awayScore]);
+        if (h !== null && a !== null && !isNaN(h) && !isNaN(a)) {
+            if (h > a) setAutoSelectedPrediction('home');
+            else if (a > h) setAutoSelectedPrediction('away');
+            else setAutoSelectedPrediction('draw');
+        } else {
+            setAutoSelectedPrediction(null);
+        }
+    }, [homeScore, awayScore]);
 
-  // Reset scores when modal closes
-  useEffect(() => {
-    if (!visible) {
-      setHomeScore('');
-      setAwayScore('');
-      setAutoSelectedPrediction(null);
-<<<<<<< HEAD
-=======
-      setSelectedAmount(null);
->>>>>>> 783ee88 (Your descriptive commit message here)
-    }
-  }, [visible]);
+    useEffect(() => {
+        if (!visible) {
+            setHomeScore('');
+            setAwayScore('');
+            setSelectedRange(null);
+            setPools([]);
+        }
+    }, [visible]);
 
-  const handleVote = async () => {
-<<<<<<< HEAD
-=======
-    if (!selectedAmount) {
-      Alert.alert('Select Amount', 'Please select a betting amount.');
-      return;
-    }
+    useEffect(() => {
+        if (!visible || !selectedRange) return;
+        const matchId = match._id || String(match.id);
+        setPoolsLoading(true);
+        matchesAPI.getMatchPools(matchId, selectedRange.amount)
+            .then((res) => setPools(res.success ? res.data : []))
+            .catch(() => setPools([]))
+            .finally(() => setPoolsLoading(false));
+    }, [visible, selectedRange, match._id, match.id]);
 
->>>>>>> 783ee88 (Your descriptive commit message here)
-    if (!autoSelectedPrediction) {
-      Alert.alert('Enter Scores', 'Please enter both scores to make your prediction.');
-      return;
-    }
+    const handleVote = async () => {
+        const h = parseInt(homeScore, 10);
+        const a = parseInt(awayScore, 10);
 
-    const homeScoreNum = homeScore ? parseInt(homeScore, 10) : undefined;
-    const awayScoreNum = awayScore ? parseInt(awayScore, 10) : undefined;
+        if (!selectedRange || isNaN(h) || isNaN(a) || !autoSelectedPrediction) {
+            Alert.alert('Incomplete', 'Please fill in both scores and select a stake.');
+            return;
+        }
 
-    if (homeScoreNum === undefined || awayScoreNum === undefined || isNaN(homeScoreNum) || isNaN(awayScoreNum)) {
-      Alert.alert('Invalid Scores', 'Please enter valid numbers for both scores.');
-      return;
-    }
+        setIsLoading(true);
+        try {
+            await onVote(match._id || String(match.id), autoSelectedPrediction, h, a, selectedRange.amount);
+            onClose();
+        } catch (error) {
+            Alert.alert('Error', 'Failed to submit prediction.');
+        } finally {
+            setIsLoading(false);
+        }
+    };
 
-    setIsLoading(true);
-    try {
-      const matchId = match._id || String(match.id);
-<<<<<<< HEAD
-      await onVote(matchId, autoSelectedPrediction, homeScoreNum, awayScoreNum);
-      setHomeScore('');
-      setAwayScore('');
-      setAutoSelectedPrediction(null);
-=======
-      await onVote(matchId, autoSelectedPrediction, homeScoreNum, awayScoreNum, selectedAmount);
-      setHomeScore('');
-      setAwayScore('');
-      setAutoSelectedPrediction(null);
-      setSelectedAmount(null);
->>>>>>> 783ee88 (Your descriptive commit message here)
-      onClose();
-    } catch (error) {
-      Alert.alert('Error', 'Failed to cast vote. Please try again.');
-    } finally {
-      setIsLoading(false);
-    }
-  };
-
-  const predictionOptions = [
-    {
-      id: 'home' as const,
-      label: match.homeTeam,
-      logo: match.homeLogo,
-      color: '#3B82F6',
-    },
-    {
-      id: 'draw' as const,
-      label: 'Draw',
-      logo: null,
-      color: '#F59E0B',
-    },
-    {
-      id: 'away' as const,
-      label: match.awayTeam,
-      logo: match.awayLogo,
-      color: '#EF4444',
-    },
-  ];
-
-  return (
-    <Modal
-      visible={visible}
-      animationType="slide"
-      transparent={true}
-      onRequestClose={onClose}
-    >
-      <KeyboardAvoidingView 
-        style={styles.overlay}
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        keyboardVerticalOffset={Platform.OS === 'ios' ? 0 : 20}
-      >
-        <View style={styles.modalContainer}>
-          <ScrollView 
-            style={styles.modalScrollView}
-            showsVerticalScrollIndicator={false}
-            keyboardShouldPersistTaps="handled"
-          >
-          {/* Header */}
-          <View style={styles.header}>
-            <Text style={styles.title}>Predict the Winner</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeButton}>
-              <Ionicons name="close" size={24} color="#9CA3AF" />
-            </TouchableOpacity>
-          </View>
-
-          {/* Match Info */}
-          <View style={styles.matchInfo}>
-            <View style={styles.team}>
-              <Image 
-                source={{ uri: getDirectImageUrl(match.homeLogo) || "https://via.placeholder.com/40" }} 
-                style={styles.teamLogo}
-                onError={(e) => {
-                  console.log('Image load error:', match.homeLogo);
-                }}
-              />
-              <Text style={styles.teamName}>{match.homeTeam}</Text>
-            </View>
-            <View style={styles.vsContainer}>
-              <Text style={styles.vsText}>VS</Text>
-              {match.time && <Text style={styles.matchTime}>{match.time}</Text>}
-              {match.score && <Text style={styles.matchScore}>{match.score}</Text>}
-            </View>
-            <View style={styles.team}>
-              <Text style={styles.teamName}>{match.awayTeam}</Text>
-              <Image 
-                source={{ uri: getDirectImageUrl(match.awayLogo) || "https://via.placeholder.com/40" }} 
-                style={styles.teamLogo}
-                onError={(e) => {
-                  console.log('Image load error:', match.awayLogo);
-                }}
-              />
-            </View>
-          </View>
-
-<<<<<<< HEAD
-=======
-           {/* Betting Amount Selection */}
-           <View style={styles.amountSection}>
-             <Text style={styles.amountTitle}>Select Betting Amount</Text>
-             <View style={styles.amountGrid}>
-               {BET_AMOUNTS.map((amount) => {
-                 const isSelected = selectedAmount === amount;
-                 return (
-                   <TouchableOpacity
-                     key={amount}
-                     style={[
-                       styles.amountChip,
-                       isSelected && styles.amountChipSelected,
-                     ]}
-                     onPress={() => setSelectedAmount(amount)}
-                     disabled={isLoading}
-                   >
-                     <Text
-                       style={[
-                         styles.amountChipText,
-                         isSelected && styles.amountChipTextSelected,
-                       ]}
-                     >
-                       {amount.toLocaleString()}
-                     </Text>
-                   </TouchableOpacity>
-                 );
-               })}
-             </View>
-           </View>
-
->>>>>>> 783ee88 (Your descriptive commit message here)
-           {/* Score Prediction */}
-           <View style={styles.scorePredictionSection}>
-             <Text style={styles.scorePredictionTitle}>Predict the Score</Text>
-             <View style={styles.scoreInputContainer}>
-               <View style={styles.scoreInputWrapper}>
-                 <Text style={styles.scoreTeamLabel}>{match.homeTeam}</Text>
-                 <TextInput
-                   style={styles.scoreInput}
-                   value={homeScore}
-                   onChangeText={setHomeScore}
-                   placeholder="0"
-                   keyboardType="numeric"
-                   maxLength={2}
-                 />
-               </View>
-               <Text style={styles.scoreSeparator}>-</Text>
-               <View style={styles.scoreInputWrapper}>
-                 <Text style={styles.scoreTeamLabel}>{match.awayTeam}</Text>
-                 <TextInput
-                   style={styles.scoreInput}
-                   value={awayScore}
-                   onChangeText={setAwayScore}
-                   placeholder="0"
-                   keyboardType="numeric"
-                   maxLength={2}
-                 />
-               </View>
-             </View>
-           </View>
-
-           {/* Auto-selected Prediction Display */}
-           {autoSelectedPrediction && (
-             <View style={styles.predictionSection}>
-               <Text style={styles.predictionTitle}>Your Prediction</Text>
-               <View style={styles.optionsContainer}>
-                 {predictionOptions.map((option) => (
-                   <View
-                     key={option.id}
-                     style={[
-                       styles.predictionOption,
-                       autoSelectedPrediction === option.id && styles.selectedOption,
-                       { borderColor: option.color },
-                       !autoSelectedPrediction && styles.disabledOption,
-                     ]}
-                   >
-                    <View style={styles.optionContent}>
-                      {option.logo ? (
-                        <Image 
-                          source={{ uri: getDirectImageUrl(option.logo) || "https://via.placeholder.com/30" }} 
-                          style={styles.optionLogo}
-                          onError={(e) => {
-                            console.log('Image load error:', option.logo);
-                          }}
-                        />
-                      ) : (
-                        <View style={[styles.drawIcon, { backgroundColor: option.color }]}>
-                          <Text style={styles.drawText}>=</Text>
-                        </View>
-                      )}
-                      <Text style={styles.optionLabel}>{option.label}</Text>
+    return (
+        <Modal visible={visible} animationType="slide" transparent={true} onRequestClose={onClose}>
+            <KeyboardAvoidingView 
+                style={styles.overlay} 
+                behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            >
+                <View style={styles.modalContainer}>
+                    <View style={styles.sheetHandle} />
+                    
+                    <View style={styles.header}>
+                        <Text style={styles.headerTitle}>Predict & Stake</Text>
+                        <TouchableOpacity onPress={onClose} style={styles.closeIcon}>
+                            <Ionicons name="close" size={20} color="#9CA3AF" />
+                        </TouchableOpacity>
                     </View>
-                     {autoSelectedPrediction === option.id && (
-                       <View style={[styles.checkmark, { backgroundColor: option.color }]}>
-                         <Ionicons name="checkmark" size={16} color="#FFFFFF" />
-                       </View>
-                     )}
-                   </View>
-                 ))}
-               </View>
-             </View>
-           )}
 
-          {/* Action Buttons */}
-          <View style={styles.actionButtons}>
-            <TouchableOpacity
-              style={styles.cancelButton}
-              onPress={onClose}
-              disabled={isLoading}
-            >
-              <Text style={styles.cancelButtonText}>Cancel</Text>
-            </TouchableOpacity>
-            <TouchableOpacity
-              style={[
-                styles.voteButton,
-                (!autoSelectedPrediction || isLoading) && styles.disabledButton,
-              ]}
-              onPress={handleVote}
-              disabled={!autoSelectedPrediction || isLoading}
-            >
-              {isLoading ? (
-                <ActivityIndicator size="small" color="#FFFFFF" />
-              ) : (
-                <Text style={styles.voteButtonText}>Submit Prediction</Text>
-              )}
-            </TouchableOpacity>
-          </View>
-          </ScrollView>
-        </View>
-      </KeyboardAvoidingView>
-    </Modal>
-  );
+                    <ScrollView 
+                        showsVerticalScrollIndicator={false} 
+                        contentContainerStyle={styles.scrollContent}
+                        keyboardShouldPersistTaps="handled"
+                    >
+                        {/* Compact Scoreboard Card */}
+                        <View style={styles.scoreboardCard}>
+                            <View style={styles.teamContainer}>
+                                <Image source={{ uri: getDirectImageUrl(match.homeLogo) }} style={styles.teamLogo} />
+                                <Text style={styles.teamName} numberOfLines={1}>{match.homeTeam}</Text>
+                                <TextInput
+                                    style={[styles.scoreInput, homeScore !== '' && styles.scoreInputActive]}
+                                    value={homeScore}
+                                    onChangeText={setHomeScore}
+                                    placeholder="0"
+                                    placeholderTextColor="#4A5568"
+                                    keyboardType="numeric"
+                                    maxLength={2}
+                                />
+                            </View>
+
+                            <View style={styles.vsContainer}>
+                                <Text style={styles.vsLabel}>VS</Text>
+                                <View style={styles.vsLine} />
+                            </View>
+
+                            <View style={styles.teamContainer}>
+                                <Image source={{ uri: getDirectImageUrl(match.awayLogo) }} style={styles.teamLogo} />
+                                <Text style={styles.teamName} numberOfLines={1}>{match.awayTeam}</Text>
+                                <TextInput
+                                    style={[styles.scoreInput, awayScore !== '' && styles.scoreInputActive]}
+                                    value={awayScore}
+                                    onChangeText={setAwayScore}
+                                    placeholder="0"
+                                    placeholderTextColor="#4A5568"
+                                    keyboardType="numeric"
+                                    maxLength={2}
+                                />
+                            </View>
+                        </View>
+
+                        {/* Prediction Result Badge */}
+                        <View style={styles.badgeRow}>
+                            {autoSelectedPrediction && (
+                                <View style={[styles.predictionBadge, { 
+                                    backgroundColor: autoSelectedPrediction === 'draw' ? '#F59E0B' : '#3B82F6' 
+                                }]}>
+                                    <Text style={styles.predictionBadgeText}>
+                                        {autoSelectedPrediction.toUpperCase()} WIN PREDICTED
+                                    </Text>
+                                </View>
+                            )}
+                        </View>
+
+                        {/* Stake Selection */}
+                        <Text style={styles.sectionTitle}>Select Stake Range</Text>
+                        <View style={styles.stakeGrid}>
+                            {PRICE_RANGES.map((range) => (
+                                <TouchableOpacity
+                                    key={range.amount}
+                                    onPress={() => setSelectedRange(range)}
+                                    style={[styles.stakeChip, selectedRange?.amount === range.amount && styles.stakeChipActive]}
+                                >
+                                    <Text style={[styles.stakeText, selectedRange?.amount === range.amount && styles.stakeTextActive]}>
+                                        ₦{range.label}
+                                    </Text>
+                                </TouchableOpacity>
+                            ))}
+                        </View>
+
+                        {/* Pool Status Information */}
+                        {selectedRange && (
+                            <View style={styles.poolInfoContainer}>
+                                <Ionicons name="people-circle-outline" size={16} color="#10B981" />
+                                <Text style={styles.poolInfoText}>
+                                    {poolsLoading ? 'Checking pools...' : `${pools.filter(p => !p.isClosed).length} active pools found`}
+                                </Text>
+                            </View>
+                        )}
+
+                        {/* Action Buttons */}
+                        <View style={styles.footer}>
+                            <TouchableOpacity
+                                style={[styles.submitButton, (!selectedRange || !autoSelectedPrediction) && styles.submitButtonDisabled]}
+                                onPress={handleVote}
+                                disabled={!selectedRange || !autoSelectedPrediction || isLoading}
+                            >
+                                {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>Confirm Entry</Text>}
+                            </TouchableOpacity>
+                        </View>
+                    </ScrollView>
+                </View>
+            </KeyboardAvoidingView>
+        </Modal>
+    );
 }
 
 const styles = StyleSheet.create({
-  overlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.8)',
-    justifyContent: 'center',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-  },
-  modalContainer: {
-    backgroundColor: '#2D3748',
-    borderRadius: 20,
-    width: '100%',
-    maxWidth: 400,
-    maxHeight: '80%',
-  },
-  modalScrollView: {
-    maxHeight: '100%',
-  },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#4A5568',
-  },
-  title: {
-    fontSize: 20,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  closeButton: {
-    padding: 5,
-  },
-  matchInfo: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 20,
-  },
-  team: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  teamLogo: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    marginBottom: 8,
-  },
-  teamName: {
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    textAlign: 'center',
-  },
-  vsContainer: {
-    alignItems: 'center',
-    marginHorizontal: 15,
-  },
-  vsText: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginBottom: 5,
-  },
-  matchTime: {
-    fontSize: 12,
-    color: '#9CA3AF',
-  },
-  matchScore: {
-    fontSize: 14,
-    fontWeight: 'bold',
-    color: '#10B981',
-  },
-  predictionSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  predictionTitle: {
-    fontSize: 18,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  optionsContainer: {
-    gap: 10,
-  },
-  predictionOption: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 15,
-    borderRadius: 12,
-    borderWidth: 2,
-    borderColor: '#4A5568',
-    backgroundColor: '#374151',
-  },
-  selectedOption: {
-    backgroundColor: '#1F2937',
-    borderWidth: 3,
-  },
-  disabledOption: {
-    opacity: 0.5,
-  },
-  optionContent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-  },
-  optionLogo: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    marginRight: 12,
-  },
-  drawIcon: {
-    width: 30,
-    height: 30,
-    borderRadius: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  drawText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-  },
-  optionLabel: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#FFFFFF',
-  },
-  checkmark: {
-    width: 24,
-    height: 24,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  actionButtons: {
-    flexDirection: 'row',
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-    gap: 10,
-  },
-  cancelButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: '#4A5568',
-    alignItems: 'center',
-  },
-  cancelButtonText: {
-    fontSize: 16,
-    fontWeight: '500',
-    color: '#9CA3AF',
-  },
-  voteButton: {
-    flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#3B82F6',
-    alignItems: 'center',
-  },
-  disabledButton: {
-    backgroundColor: '#4A5568',
-  },
-  voteButtonText: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-  },
-  scorePredictionSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  scorePredictionTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 15,
-    textAlign: 'center',
-  },
-  scoreInputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  scoreInputWrapper: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  scoreTeamLabel: {
-    fontSize: 12,
-    color: '#9CA3AF',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  scoreInput: {
-    backgroundColor: '#4A5568',
-    borderRadius: 8,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    fontSize: 18,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    textAlign: 'center',
-    width: 60,
-    borderWidth: 1,
-    borderColor: '#6B7280',
-  },
-  scoreSeparator: {
-    fontSize: 24,
-    fontWeight: 'bold',
-    color: '#FFFFFF',
-    marginHorizontal: 20,
-  },
-<<<<<<< HEAD
-=======
-  amountSection: {
-    paddingHorizontal: 20,
-    paddingBottom: 20,
-  },
-  amountTitle: {
-    fontSize: 16,
-    fontWeight: '600',
-    color: '#FFFFFF',
-    marginBottom: 12,
-    textAlign: 'center',
-  },
-  amountGrid: {
-    flexDirection: 'row',
-    flexWrap: 'wrap',
-    justifyContent: 'center',
-  },
-  amountChip: {
-    paddingVertical: 8,
-    paddingHorizontal: 14,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#4B5563',
-    backgroundColor: '#1F2937',
-    margin: 4,
-  },
-  amountChipSelected: {
-    backgroundColor: '#3B82F6',
-    borderColor: '#60A5FA',
-  },
-  amountChipText: {
-    fontSize: 14,
-    color: '#E5E7EB',
-    fontWeight: '500',
-  },
-  amountChipTextSelected: {
-    color: '#FFFFFF',
-    fontWeight: '700',
-  },
->>>>>>> 783ee88 (Your descriptive commit message here)
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.8)', justifyContent: 'flex-end' },
+    modalContainer: { backgroundColor: '#111827', borderTopLeftRadius: 30, borderTopRightRadius: 30, maxHeight: '85%' },
+    sheetHandle: { width: 40, height: 4, backgroundColor: '#374151', borderRadius: 2, alignSelf: 'center', marginTop: 12 },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', padding: 20 },
+    headerTitle: { color: '#FFF', fontSize: 18, fontWeight: '800' },
+    closeIcon: { backgroundColor: '#1F2937', padding: 6, borderRadius: 20 },
+    scrollContent: { paddingHorizontal: 20, paddingBottom: 40 },
+    scoreboardCard: { 
+        flexDirection: 'row', 
+        backgroundColor: '#1F2937', 
+        padding: 20, 
+        borderRadius: 20, 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#374151'
+    },
+    teamContainer: { alignItems: 'center', width: '40%' },
+    teamLogo: { width: 50, height: 50, marginBottom: 8 },
+    teamName: { color: '#9CA3AF', fontSize: 12, fontWeight: '700', marginBottom: 12, textAlign: 'center' },
+    scoreInput: { 
+        backgroundColor: '#111827', 
+        width: 65, 
+        height: 55, 
+        borderRadius: 12, 
+        color: '#FFF', 
+        fontSize: 24, 
+        fontWeight: '900', 
+        textAlign: 'center', 
+        borderWidth: 1, 
+        borderColor: '#374151' 
+    },
+    scoreInputActive: { borderColor: '#3B82F6', backgroundColor: '#1E293B' },
+    vsContainer: { alignItems: 'center' },
+    vsLabel: { color: '#4B5563', fontWeight: '900', fontSize: 14, marginBottom: 4 },
+    vsLine: { width: 1, height: 40, backgroundColor: '#374151' },
+    badgeRow: { height: 40, justifyContent: 'center', alignItems: 'center', marginTop: -15 },
+    predictionBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
+    predictionBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
+    sectionTitle: { color: '#6B7280', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', marginBottom: 16, marginTop: 10 },
+    stakeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
+    stakeChip: { 
+        width: '31%', 
+        backgroundColor: '#1F2937', 
+        paddingVertical: 14, 
+        borderRadius: 12, 
+        alignItems: 'center', 
+        marginBottom: 10,
+        borderWidth: 1,
+        borderColor: '#374151'
+    },
+    stakeChipActive: { backgroundColor: '#3B82F6', borderColor: '#60A5FA' },
+    stakeText: { color: '#9CA3AF', fontWeight: '700', fontSize: 13 },
+    stakeTextActive: { color: '#FFF', fontWeight: '800' },
+    poolInfoContainer: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', marginTop: 10 },
+    poolInfoText: { color: '#10B981', fontSize: 12, fontWeight: '600', marginLeft: 6 },
+    footer: { marginTop: 30 },
+    submitButton: { 
+        backgroundColor: '#10B981', 
+        paddingVertical: 18, 
+        borderRadius: 16, 
+        alignItems: 'center',
+        shadowColor: '#10B981',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 10,
+    },
+    submitButtonDisabled: { backgroundColor: '#374151', shadowOpacity: 0 },
+    submitButtonText: { color: '#FFF', fontSize: 16, fontWeight: '800' },
 });
