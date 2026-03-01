@@ -31,6 +31,7 @@ export const API_ENDPOINTS = {
     SCORE: (id: string) => `${API_BASE_URL}/matches/${id}/score`,
     POOLS: (id: string) => `${API_BASE_URL}/matches/${id}/pools`,
     JOIN_POOL: (id: string) => `${API_BASE_URL}/matches/${id}/pools/join`,
+    MY_POOLS: `${API_BASE_URL}/matches/pools/my`,
   },
   // Highlights
   HIGHLIGHTS: {

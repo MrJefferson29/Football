@@ -35,7 +35,8 @@ interface VotingModalProps {
         prediction: 'home' | 'draw' | 'away',
         homeScore: number,
         awayScore: number,
-        amount: number
+    amount: number,
+    poolId?: string
     ) => Promise<void>;
 }
 
@@ -56,6 +57,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
     const [selectedRange, setSelectedRange] = useState<{ label: string; amount: number } | null>(null);
     const [pools, setPools] = useState<any[]>([]);
     const [poolsLoading, setPoolsLoading] = useState(false);
+  const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
 
     useEffect(() => {
         const h = homeScore ? parseInt(homeScore, 10) : null;
@@ -77,6 +79,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
             setAutoSelectedPrediction(null);
             setSelectedRange(null);
             setPools([]);
+            setSelectedPoolId(null);
         }
     }, [visible]);
 
@@ -92,10 +95,20 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
         matchesAPI
             .getMatchPools(matchId, {
                 amount: selectedRange.amount,
-                prediction: autoSelectedPrediction,
                 onlyCandidates: true,
             })
-            .then((res) => setPools(res.success && Array.isArray(res.data) ? res.data : []))
+            .then((res) => {
+                const serverPools = res.success && Array.isArray(res.data) ? res.data : [];
+                // On the client, keep only pools that already have
+                // at least one participant with a different prediction
+                const filtered = serverPools.filter((pool: any) =>
+                    Array.isArray(pool.participants) &&
+                    pool.participants.some(
+                        (p: any) => p.prediction && p.prediction !== autoSelectedPrediction
+                    )
+                );
+                setPools(filtered);
+            })
             .catch(() => setPools([]))
             .finally(() => setPoolsLoading(false));
     }, [visible, selectedRange, autoSelectedPrediction, match._id, match.id]);
@@ -111,7 +124,14 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
 
         setIsLoading(true);
         try {
-            await onVote(match._id || String(match.id), autoSelectedPrediction, h, a, selectedRange.amount);
+            await onVote(
+              match._id || String(match.id),
+              autoSelectedPrediction,
+              h,
+              a,
+              selectedRange.amount,
+              selectedPoolId || undefined
+            );
             onClose();
         } catch (error) {
             Alert.alert('Error', 'Failed to submit prediction.');
@@ -207,7 +227,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                         </View>
 
                         {/* Pool Status Information & List */}
-                        {selectedRange && (
+                                {selectedRange && (
                             <View style={styles.poolInfoSection}>
                                 <View style={styles.poolInfoHeader}>
                                     <Ionicons name="people-circle-outline" size={16} color="#10B981" />
@@ -221,7 +241,18 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                                 {!poolsLoading && pools.length > 0 && (
                                     <View style={styles.poolList}>
                                         {pools.map((pool) => (
-                                            <View key={pool._id} style={styles.poolCard}>
+                                            <TouchableOpacity
+                                              key={pool._id}
+                                              style={[
+                                                styles.poolCard,
+                                                selectedPoolId === pool._id && styles.poolCardSelected,
+                                              ]}
+                                              onPress={() =>
+                                                setSelectedPoolId(
+                                                  selectedPoolId === pool._id ? null : pool._id
+                                                )
+                                              }
+                                            >
                                                 <View style={styles.poolCardHeader}>
                                                     <Text style={styles.poolName} numberOfLines={1}>
                                                         {pool.name || 'Prediction Pool'}
@@ -264,7 +295,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                                                         </Text>
                                                     )}
                                                 </View>
-                                            </View>
+                                            </TouchableOpacity>
                                         ))}
                                     </View>
                                 )}
@@ -348,6 +379,7 @@ const styles = StyleSheet.create({
     poolInfoText: { color: '#10B981', fontSize: 12, fontWeight: '600', marginLeft: 6 },
     poolList: { marginTop: 10, gap: 8 },
     poolCard: { backgroundColor: '#111827', borderRadius: 12, padding: 10, borderWidth: 1, borderColor: '#1F2937' },
+    poolCardSelected: { borderColor: '#3B82F6', borderWidth: 2, backgroundColor: '#1E293B' },
     poolCardHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
     poolName: { color: '#F9FAFB', fontSize: 13, fontWeight: '700', flex: 1, marginRight: 8 },
     poolStatus: { color: '#9CA3AF', fontSize: 11 },

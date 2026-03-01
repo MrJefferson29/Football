@@ -241,12 +241,15 @@ export const matchesAPI = {
   },
   joinMatchPool: async (
     id: string,
-    data: { amount: number; prediction: 'home' | 'draw' | 'away'; homeScore?: number; awayScore?: number }
+    data: { amount: number; prediction: 'home' | 'draw' | 'away'; homeScore?: number; awayScore?: number; poolId?: string }
   ) => {
     return apiRequest(API_ENDPOINTS.MATCHES.JOIN_POOL(id), {
       method: 'POST',
       body: JSON.stringify(data),
     });
+  },
+  getMyPools: async () => {
+    return apiRequest(API_ENDPOINTS.MATCHES.MY_POOLS);
   },
 };
 

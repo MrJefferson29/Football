@@ -14,15 +14,18 @@ export default function AllMatchesScreen() {
   const [showVotingModal, setShowVotingModal] = useState(false);
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const [allMatches, setAllMatches] = useState<any[]>([]);
+  const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
+  const [previousMatches, setPreviousMatches] = useState<any[]>([]);
+  const [selectedTab, setSelectedTab] = useState<'upcoming' | 'previous'>('upcoming');
 
   useEffect(() => {
     fetchMatches();
   }, []);
 
-  // Helper function to check if a match is scheduled for today
-  const isMatchToday = (match: any): boolean => {
+  // Helper to get a Date object from match.matchDate (local date)
+  const getMatchDate = (match: any): Date | null => {
     if (!match.matchDate) {
-      return false;
+      return null;
     }
 
     try {
@@ -37,15 +40,10 @@ export default function AllMatchesScreen() {
       } else {
         matchDateObj = new Date(match.matchDate);
       }
-
-      const today = new Date();
-      const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
-      const matchDateStr = `${matchDateObj.getFullYear()}-${String(matchDateObj.getMonth() + 1).padStart(2, '0')}-${String(matchDateObj.getDate()).padStart(2, '0')}`;
-
-      return matchDateStr === todayStr;
+      return matchDateObj;
     } catch (error) {
       console.error('Error checking match date:', error);
-      return false;
+      return null;
     }
   };
 
@@ -56,15 +54,40 @@ export default function AllMatchesScreen() {
             match.awayScore !== null && match.awayScore !== undefined);
   };
 
+  // Split matches into upcoming and previous
+  const splitMatches = (matches: any[]) => {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const upcoming: any[] = [];
+    const previous: any[] = [];
+
+    matches.forEach((match) => {
+      const date = getMatchDate(match);
+      const finished = isMatchFinished(match);
+
+      if (date && date < today) {
+        previous.push(match);
+      } else if (finished) {
+        previous.push(match);
+      } else {
+        upcoming.push(match);
+      }
+    });
+
+    setUpcomingMatches(upcoming);
+    setPreviousMatches(previous);
+  };
+
   const fetchMatches = async () => {
     try {
       setLoading(true);
-      // Fetch only today's matches
-      const response = await matchesAPI.getTodayMatches();
+      // Fetch all matches and split into upcoming and previous
+      const response = await matchesAPI.getMatches();
       if (response.success) {
-        // Filter to ensure only today's matches are shown (safety check)
-        const todayMatches = response.data.filter((match: any) => isMatchToday(match));
-        setAllMatches(todayMatches);
+        const matches = response.data || [];
+        setAllMatches(matches);
+        splitMatches(matches);
       }
     } catch (error: any) {
       Alert.alert('Error', error.message || 'Failed to load matches');
@@ -95,7 +118,8 @@ export default function AllMatchesScreen() {
     prediction: 'home' | 'draw' | 'away',
     homeScore: number,
     awayScore: number,
-    amount: number
+    amount: number,
+    poolId?: string
   ) => {
     try {
       setIsLoading(true);
@@ -104,6 +128,7 @@ export default function AllMatchesScreen() {
         prediction,
         homeScore,
         awayScore,
+        poolId,
       });
       if (response.success) {
         Alert.alert('Bet Placed!', 'Your bet has been placed in a pool.');
@@ -142,8 +167,46 @@ export default function AllMatchesScreen() {
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-          {allMatches.length > 0 ? (
-            allMatches.map((match: any) => {
+          {/* Tabs for Upcoming / Previous */}
+          <View style={styles.tabsRow}>
+            <TouchableOpacity
+              style={[
+                styles.tabButton,
+                selectedTab === 'upcoming' && styles.tabButtonActive,
+              ]}
+              onPress={() => setSelectedTab('upcoming')}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedTab === 'upcoming' && styles.tabTextActive,
+                ]}
+              >
+                Upcoming
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.tabButton,
+                selectedTab === 'previous' && styles.tabButtonActive,
+              ]}
+              onPress={() => setSelectedTab('previous')}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  selectedTab === 'previous' && styles.tabTextActive,
+                ]}
+              >
+                Previous
+              </Text>
+            </TouchableOpacity>
+          </View>
+
+          {(
+            selectedTab === 'upcoming' ? upcomingMatches : previousMatches
+          ).length > 0 ? (
+            (selectedTab === 'upcoming' ? upcomingMatches : previousMatches).map((match: any) => {
               const isFinished = isMatchFinished(match);
               const hasScore = match.homeScore !== null && match.homeScore !== undefined && 
                               match.awayScore !== null && match.awayScore !== undefined;
@@ -212,7 +275,11 @@ export default function AllMatchesScreen() {
             })
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No matches scheduled for today</Text>
+              <Text style={styles.emptyText}>
+                {selectedTab === 'upcoming'
+                  ? 'No upcoming matches available'
+                  : 'No previous matches available'}
+              </Text>
             </View>
           )}
         </ScrollView>
@@ -367,5 +434,30 @@ const styles = StyleSheet.create({
     fontFamily: fonts.body,
     color: '#9CA3AF',
     fontSize: 16,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    marginBottom: 16,
+    borderRadius: 999,
+    backgroundColor: '#111827',
+    padding: 3,
+  },
+  tabButton: {
+    flex: 1,
+    paddingVertical: 8,
+    borderRadius: 999,
+    alignItems: 'center',
+  },
+  tabButtonActive: {
+    backgroundColor: '#2563EB',
+  },
+  tabText: {
+    fontSize: 13,
+    fontFamily: fonts.bodyMedium,
+    color: '#9CA3AF',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bodySemiBold,
   },
 });

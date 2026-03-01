@@ -398,7 +398,8 @@ const MarqueeComponent = ({ text }: { text: string }) => {
     prediction: 'home' | 'draw' | 'away',
     homeScore: number,
     awayScore: number,
-    amount: number
+    amount: number,
+    poolId?: string
   ) => {
     try {
       setIsLoading(true)
@@ -407,6 +408,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
         prediction,
         homeScore,
         awayScore,
+        poolId,
       })
       if (response.success) {
         await fetchHomeData()
@@ -858,6 +860,14 @@ const MarqueeComponent = ({ text }: { text: string }) => {
               <Text style={styles.linkTitle}>Statistics</Text>
               <Text style={styles.linkDescription}>App-wide stats & analytics</Text>
             </TouchableOpacity>
+
+            <TouchableOpacity style={styles.linkCard} onPress={() => router.push("/my-pools")}>
+              <View style={styles.linkIconContainer}>
+                <Ionicons name="wallet" size={24} color="#3B82F6" />
+              </View>
+              <Text style={styles.linkTitle}>My Bets</Text>
+              <Text style={styles.linkDescription}>View all your betting pools</Text>
+            </TouchableOpacity>
           </View>
         </View>
 
@@ -971,7 +981,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   scrollViewContent: {
-    paddingBottom: 80, // Add padding for the tab bar
+    paddingBottom: 80,
   },
   header: {
     paddingHorizontal: 20,
@@ -998,7 +1008,7 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   headerTitle: {
-    fontSize: 20, // Reduced from 24 to 20
+    fontSize: 20,
     fontFamily: fonts.heading,
     color: "#4084f2",
     flex: 2,
@@ -1073,53 +1083,53 @@ const styles = StyleSheet.create({
   pollCard: {
     backgroundColor: "#0c1322",
     borderRadius: 12,
-    padding: 8, // Further reduced from 12 to 8
+    padding: 8,
     alignItems: "center",
   },
   pollQuestion: {
-    fontSize: 16, // Further reduced from 18 to 16
+    fontSize: 16,
     fontFamily: fonts.heading,
     color: "#FFFFFF",
-    marginBottom: 10, // Further reduced from 15 to 10
+    marginBottom: 10,
   },
   teamsContainer: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "space-between",
     width: "100%",
-    marginBottom: 8, // Further reduced from 12 to 8
+    marginBottom: 8,
   },
   team: {
     alignItems: "center",
     flex: 1,
   },
   teamName: {
-    fontSize: 12, // Further reduced from 14 to 12
+    fontSize: 12,
     fontFamily: fonts.bodyMedium,
     color: "#FFFFFF",
     textAlign: "center",
-    marginTop: 4, // Further reduced from 6 to 4
+    marginTop: 4,
   },
   teamLogo: {
-    width: 28, // Further reduced from 36 to 28
-    height: 28, // Further reduced from 36 to 28
-    borderRadius: 14, // Further reduced from 18 to 14
-    marginBottom: 4, // Further reduced from 6 to 4
+    width: 28,
+    height: 28,
+    borderRadius: 14,
+    marginBottom: 4,
   },
   vsText: {
-    fontSize: 14, // Further reduced from 16 to 14
+    fontSize: 14,
     fontFamily: fonts.bodySemiBold,
     color: "#FFFFFF",
-    marginHorizontal: 12, // Further reduced from 15 to 12
+    marginHorizontal: 12,
   },
   voteButton: {
     backgroundColor: "#3B82F6",
-    borderRadius: 8, // Further reduced from 10 to 8
-    paddingVertical: 8, // Further reduced from 10 to 8
-    paddingHorizontal: 20, // Further reduced from 24 to 20
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 20,
   },
   voteButtonText: {
-    fontSize: 12, // Further reduced from 14 to 12
+    fontSize: 12,
     fontFamily: fonts.bodySemiBold,
     color: "#FFFFFF",
   },

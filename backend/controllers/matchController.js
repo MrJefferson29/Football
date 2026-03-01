@@ -565,9 +565,9 @@ exports.getMatchPools = async (req, res) => {
       query.amount = Number(amount);
     }
 
-    // When searching for candidate pools for a specific prediction:
+    // When searching for candidate pools:
     // - Only open pools (isClosed: false)
-    if (onlyCandidates === 'true' && prediction) {
+    if (onlyCandidates === 'true') {
       query.isClosed = false;
     }
 
@@ -575,19 +575,11 @@ exports.getMatchPools = async (req, res) => {
       .populate('participants.user', 'username avatar')
       .sort({ createdAt: 1 });
 
-    // Ensure there is at least one user in the pool whose prediction
-    // is different from the current user's prediction
-    if (onlyCandidates === 'true' && prediction) {
-      poolsQuery = poolsQuery.where('participants').elemMatch({
-        prediction: { $ne: prediction },
-      });
-    }
-
     const pools = await poolsQuery;
 
     // For candidate search, enforce participant-count rules in application code
     let result = pools;
-    if (onlyCandidates === 'true' && prediction) {
+    if (onlyCandidates === 'true') {
       result = pools.filter(
         (p) =>
           Array.isArray(p.participants) &&
@@ -612,12 +604,13 @@ exports.getMatchPools = async (req, res) => {
 const ALLOWED_BET_AMOUNTS = [1000, 2000, 5000, 10000, 50000, 100000];
 
 // @desc    Join or create a betting pool for a match
+//          If poolId is provided, attempt to join that specific pool
 // @route   POST /api/matches/:id/pools/join
 // @access  Private
 exports.joinMatchPool = async (req, res) => {
   try {
     const { id } = req.params;
-    const { amount, prediction, homeScore, awayScore } = req.body;
+    const { amount, prediction, homeScore, awayScore, poolId } = req.body;
 
     if (!amount || !prediction) {
       return res.status(400).json({
@@ -679,26 +672,46 @@ exports.joinMatchPool = async (req, res) => {
       });
     }
 
-    // Try to find an open pool to join:
-    // - same match and amount
-    // - not closed
-    // - has at least one participant (so you are joining an existing pool)
-    // - has at least one participant whose prediction is different from this user's
-    // - has fewer than 3 participants
-    const candidatePools = await MatchBetPool.find({
-      match: id,
-      amount: numericAmount,
-      isClosed: false,
-    }).sort({ createdAt: 1 });
+    let pool = null;
 
-    let pool =
-      candidatePools.find(
-        (p) =>
-          Array.isArray(p.participants) &&
-          p.participants.length > 0 &&
-          p.participants.length < 3 &&
-          p.participants.some((part) => part.prediction !== prediction)
-      ) || null;
+    // If a specific poolId is provided, try to join that pool first
+    if (poolId) {
+      const found = await MatchBetPool.findById(poolId);
+      if (
+        found &&
+        String(found.match) === String(id) &&
+        found.amount === numericAmount &&
+        !found.isClosed &&
+        Array.isArray(found.participants) &&
+        found.participants.length < 3
+      ) {
+        pool = found;
+      }
+    }
+
+    // If no specific pool chosen or it was invalid, auto-select a candidate pool
+    if (!pool) {
+      // Try to find an open pool to join:
+      // - same match and amount
+      // - not closed
+      // - has at least one participant (so you are joining an existing pool)
+      // - has at least one participant whose prediction is different from this user's
+      // - has fewer than 3 participants
+      const candidatePools = await MatchBetPool.find({
+        match: id,
+        amount: numericAmount,
+        isClosed: false,
+      }).sort({ createdAt: 1 });
+
+      pool =
+        candidatePools.find(
+          (p) =>
+            Array.isArray(p.participants) &&
+            p.participants.length > 0 &&
+            p.participants.length < 3 &&
+            p.participants.some((part) => part.prediction !== prediction)
+        ) || null;
+    }
 
     // If none found, create a fresh pool with this user as first participant
     if (!pool) {
@@ -754,6 +767,80 @@ exports.joinMatchPool = async (req, res) => {
     res.status(200).json({
       success: true,
       data: populatedPool,
+    });
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+// @desc    Get all betting pools for the current user
+// @route   GET /api/matches/pools/my
+// @access  Private
+exports.getMyMatchPools = async (req, res) => {
+  try {
+    const userId = String(req.user.id);
+
+    const pools = await MatchBetPool.find({
+      'participants.user': userId,
+    })
+      .populate(
+        'match',
+        'homeTeam awayTeam homeLogo awayLogo matchDate matchTime league status homeScore awayScore'
+      )
+      .populate('participants.user', 'username avatar')
+      .sort({ createdAt: -1 });
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const active = [];
+    const past = [];
+
+    for (const pool of pools) {
+      const obj = pool.toObject();
+      const match = obj.match;
+      let category = 'active';
+
+      if (match) {
+        const matchDate = match.matchDate ? new Date(match.matchDate) : null;
+        const finished =
+          match.status === 'finished' ||
+          (match.homeScore !== null &&
+            match.homeScore !== undefined &&
+            match.awayScore !== null &&
+            match.awayScore !== undefined);
+
+        if (finished) {
+          category = 'past';
+        } else if (matchDate && matchDate < today) {
+          category = 'past';
+        }
+      }
+
+      // Attach the current user's entry for convenience
+      const myEntry =
+        (obj.participants || []).find(
+          (p) =>
+            String(p.user && p.user._id ? p.user._id : p.user) === userId
+        ) || null;
+      obj.myEntry = myEntry;
+
+      if (category === 'past') {
+        past.push(obj);
+      } else {
+        active.push(obj);
+      }
+    }
+
+    res.status(200).json({
+      success: true,
+      data: {
+        active,
+        past,
+      },
     });
   } catch (error) {
     res.status(500).json({
