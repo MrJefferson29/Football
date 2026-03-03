@@ -1,15 +1,18 @@
 const FanGroup = require('../models/FanGroup');
 const User = require('../models/User');
+const { localizeFanGroup } = require('../utils/localize');
 
 // @desc    Get all fan groups
 // @route   GET /api/fan-groups
 // @access  Public
 exports.getFanGroups = async (req, res) => {
   try {
-    const groups = await FanGroup.find()
+    const groupDocs = await FanGroup.find()
       .populate('posts.userId', 'username avatar')
       .populate('posts.comments.userId', 'username avatar')
       .sort({ memberCount: -1 });
+    const lang = req.lang || 'en';
+    const groups = groupDocs.map((g) => localizeFanGroup(g, lang));
 
     res.status(200).json({
       success: true,
@@ -28,17 +31,20 @@ exports.getFanGroups = async (req, res) => {
 // @access  Public
 exports.getFanGroup = async (req, res) => {
   try {
-    const group = await FanGroup.findById(req.params.id)
+    const groupDoc = await FanGroup.findById(req.params.id)
       .populate('posts.userId', 'username avatar')
       .populate('posts.comments.userId', 'username avatar')
       .populate('members', 'username avatar');
 
-    if (!group) {
+    if (!groupDoc) {
       return res.status(404).json({
         success: false,
         message: 'Fan group not found'
       });
     }
+
+    const lang = req.lang || 'en';
+    const group = localizeFanGroup(groupDoc, lang);
 
     res.status(200).json({
       success: true,

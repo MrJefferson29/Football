@@ -1,4 +1,5 @@
 const News = require('../models/News');
+const { localizeNewsItem } = require('../utils/localize');
 
 // @desc    Get all news
 // @route   GET /api/news
@@ -16,7 +17,9 @@ exports.getNews = async (req, res) => {
       query.isTrending = true;
     }
 
-    const news = await News.find(query).sort({ createdAt: -1 });
+    const newsDocs = await News.find(query).sort({ createdAt: -1 });
+    const lang = req.lang || 'en';
+    const news = newsDocs.map((n) => localizeNewsItem(n, lang));
     res.status(200).json({
       success: true,
       data: news
@@ -34,7 +37,9 @@ exports.getNews = async (req, res) => {
 // @access  Public
 exports.getTrendingNews = async (req, res) => {
   try {
-    const news = await News.find({ isTrending: true }).sort({ createdAt: -1 });
+    const newsDocs = await News.find({ isTrending: true }).sort({ createdAt: -1 });
+    const lang = req.lang || 'en';
+    const news = newsDocs.map((n) => localizeNewsItem(n, lang));
     res.status(200).json({
       success: true,
       data: news

@@ -20,6 +20,7 @@ app.use(cors());
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan('dev'));
+app.use(require('./middleware/lang'));
 
 // MongoDB Connection
 const MONGODB_URI = process.env.MONGO_URI || 'mongodb+srv://daftscope:CHAINXAU.29j@cluster0.impydmt.mongodb.net/?appName=Cluster0';

@@ -1,4 +1,5 @@
 const Highlight = require('../models/Highlight');
+const { localizeHighlight } = require('../utils/localize');
 
 // @desc    Get all highlights
 // @route   GET /api/highlights
@@ -12,12 +13,14 @@ exports.getHighlights = async (req, res) => {
       query.category = category;
     }
 
-    const highlights = await Highlight.find(query)
+    const highlightDocs = await Highlight.find(query)
       .populate('comments.userId', 'username avatar')
       .populate('comments.replies.userId', 'username avatar')
       .populate('comments.likedBy', 'username')
       .populate('comments.likedBy', 'username')
       .sort({ createdAt: -1 });
+    const lang = req.lang || 'en';
+    const highlights = highlightDocs.map((h) => localizeHighlight(h, lang));
     res.status(200).json({
       success: true,
       data: highlights
@@ -35,18 +38,21 @@ exports.getHighlights = async (req, res) => {
 // @access  Public
 exports.getHighlight = async (req, res) => {
   try {
-    const highlight = await Highlight.findById(req.params.id)
+    const highlightDoc = await Highlight.findById(req.params.id)
       .populate('comments.userId', 'username avatar')
       .populate('comments.replies.userId', 'username avatar')
       .populate('comments.likedBy', 'username')
       .populate('comments.likedBy', 'username');
 
-    if (!highlight) {
+    if (!highlightDoc) {
       return res.status(404).json({
         success: false,
         message: 'Highlight not found'
       });
     }
+
+    const lang = req.lang || 'en';
+    const highlight = localizeHighlight(highlightDoc, lang);
 
     res.status(200).json({
       success: true,

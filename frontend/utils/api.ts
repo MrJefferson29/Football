@@ -1,5 +1,6 @@
 import { API_ENDPOINTS } from '@/constants/api';
 import { storage } from './storage';
+import i18n from '@/i18n';
 
 // Get auth token from storage
 const getToken = async (): Promise<string | null> => {
@@ -23,6 +24,7 @@ export const apiRequest = async (
     
     const headers: Record<string, string> = {
       'Content-Type': 'application/json',
+      'Accept-Language': i18n.language || 'en',
       ...(options.headers as Record<string, string> | undefined),
     };
 

@@ -1,4 +1,5 @@
 const Product = require('../models/Product');
+const { localizeProduct } = require('../utils/localize');
 
 // @desc    Get all products
 // @route   GET /api/products
@@ -38,9 +39,12 @@ exports.getProducts = async (req, res) => {
     if (sort === 'likes') sortOption = { likes: -1 };
     if (sort === 'purchases') sortOption = { purchaseCount: -1 };
 
-    const products = await Product.find(query)
+    const productDocs = await Product.find(query)
       .populate('createdBy', 'username')
       .sort(sortOption);
+
+    const lang = req.lang || 'en';
+    const products = productDocs.map((p) => localizeProduct(p, lang));
 
     res.status(200).json({
       success: true,
@@ -60,16 +64,19 @@ exports.getProducts = async (req, res) => {
 // @access  Public
 exports.getProduct = async (req, res) => {
   try {
-    const product = await Product.findById(req.params.id)
+    const productDoc = await Product.findById(req.params.id)
       .populate('createdBy', 'username')
       .populate('reviews.userId', 'username avatar');
 
-    if (!product) {
+    if (!productDoc) {
       return res.status(404).json({
         success: false,
         message: 'Product not found'
       });
     }
+
+    const lang = req.lang || 'en';
+    const product = localizeProduct(productDoc, lang);
 
     res.status(200).json({
       success: true,
