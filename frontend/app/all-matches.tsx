@@ -7,8 +7,10 @@ import VotingModal from '@/components/VotingModal';
 import { matchesAPI } from '@/utils/api';
 import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
+import { useTranslation } from 'react-i18next';
 
 export default function AllMatchesScreen() {
+  const { t } = useTranslation();
   const [isLoading, setIsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showVotingModal, setShowVotingModal] = useState(false);
@@ -90,7 +92,7 @@ export default function AllMatchesScreen() {
         splitMatches(matches);
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to load matches');
+      Alert.alert(t('Error'), error.message || t('Failed to load matches'));
     } finally {
       setLoading(false);
     }
@@ -131,15 +133,15 @@ export default function AllMatchesScreen() {
         poolId,
       });
       if (response.success) {
-        Alert.alert('Bet Placed!', 'Your bet has been placed in a pool.');
+        Alert.alert(t('Bet Placed!'), t('Your bet has been placed in a pool.'));
         setShowVotingModal(false);
         setSelectedMatch(null);
         await fetchMatches();
       } else {
-        Alert.alert('Error', response.message || 'Failed to place bet');
+        Alert.alert(t('Error'), response.message || t('Failed to place bet'));
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to place bet');
+      Alert.alert(t('Error'), error.message || t('Failed to place bet'));
     } finally {
       setIsLoading(false);
     }
@@ -156,14 +158,14 @@ export default function AllMatchesScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>All Matches</Text>
+        <Text style={styles.headerTitle}>{t('All Matches')}</Text>
         <View style={styles.placeholder} />
       </View>
 
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading matches...</Text>
+          <Text style={styles.loadingText}>{t('Loading matches...')}</Text>
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -182,7 +184,7 @@ export default function AllMatchesScreen() {
                   selectedTab === 'upcoming' && styles.tabTextActive,
                 ]}
               >
-                Upcoming
+                {t('Upcoming')}
               </Text>
             </TouchableOpacity>
             <TouchableOpacity
@@ -198,7 +200,7 @@ export default function AllMatchesScreen() {
                   selectedTab === 'previous' && styles.tabTextActive,
                 ]}
               >
-                Previous
+                {t('Previous')}
               </Text>
             </TouchableOpacity>
           </View>
@@ -226,7 +228,7 @@ export default function AllMatchesScreen() {
                     <View style={styles.matchTimeContainer}>
                       {isFinished ? (
                         <View style={styles.finishedBadge}>
-                          <Text style={styles.finishedText}>Finished</Text>
+                          <Text style={styles.finishedText}>{t('Finished')}</Text>
                         </View>
                       ) : (
                         <Text style={styles.matchTime}>{match.matchTime}</Text>
@@ -254,7 +256,7 @@ export default function AllMatchesScreen() {
                       ) : (
                         <>
                           <Text style={styles.vsText}>VS</Text>
-                          {!isFinished && <Text style={styles.voteText}>Tap to vote</Text>}
+                          {!isFinished && <Text style={styles.voteText}>{t('Tap to vote')}</Text>}
                         </>
                       )}
                     </View>
@@ -277,8 +279,8 @@ export default function AllMatchesScreen() {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
                 {selectedTab === 'upcoming'
-                  ? 'No upcoming matches available'
-                  : 'No previous matches available'}
+                  ? t('No upcoming matches available')
+                  : t('No previous matches available')}
               </Text>
             </View>
           )}

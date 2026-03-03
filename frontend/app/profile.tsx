@@ -8,8 +8,11 @@ import { fonts } from '@/utils/typography';
 import * as ImagePicker from 'expo-image-picker';
 import { uploadAPI } from '@/utils/api';
 import * as Clipboard from 'expo-clipboard';
+import { useTranslation } from 'react-i18next';
+import { setLanguage } from '@/i18n';
 
 export default function ProfileScreen() {
+  const { t, i18n } = useTranslation();
   const [activeTab, setActiveTab] = useState('profile');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
   const { user, logout, updateProfile } = useAuth();
@@ -30,13 +33,13 @@ export default function ProfileScreen() {
   const referrals = user?.referrals ?? 0;
   const referralCode = user?.referralCode || '';
   const referralLink = referralCode ? `https://fanarena.app/register?ref=${referralCode}` : '—';
-  const streak = 0; // not tracked yet
+  const streak = 0;
 
   const handleChangePhoto = async () => {
     try {
       const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert('Permission needed', 'Please allow photo access to change your avatar.');
+        Alert.alert(t('Permission needed'), t('Please allow photo access to change your avatar.'));
         return;
       }
       const result = await ImagePicker.launchImageLibraryAsync({
@@ -51,13 +54,13 @@ export default function ProfileScreen() {
       const uploadRes = await uploadAPI.uploadImage(result.assets[0].uri, 'avatars');
       if (uploadRes.success && uploadRes.data?.url) {
         await updateProfile({ avatar: uploadRes.data.url });
-        Alert.alert('Success', 'Profile photo updated.');
+        Alert.alert(t('Success'), t('Profile photo updated.'));
       } else {
-        throw new Error(uploadRes.message || 'Failed to upload image');
+        throw new Error(uploadRes.message || t('Failed to upload image'));
       }
     } catch (error: any) {
       console.error('Avatar update error:', error);
-      Alert.alert('Error', error.message || 'Failed to update photo');
+      Alert.alert(t('Error'), error.message || t('Failed to update photo'));
     } finally {
       setUploadingAvatar(false);
     }
@@ -66,10 +69,13 @@ export default function ProfileScreen() {
   const copyToClipboard = async (text: string, type: 'code' | 'link' = 'code') => {
     try {
       await Clipboard.setStringAsync(text);
-      Alert.alert('Copied!', `${type === 'code' ? 'Referral code' : 'Referral link'} copied to clipboard`);
+      Alert.alert(
+        t('Copied!'),
+        `${type === 'code' ? t('Referral code') : t('Referral link')} ${t('copied to clipboard')}`
+      );
     } catch (error: any) {
       console.error('Copy error:', error);
-      Alert.alert('Error', 'Failed to copy to clipboard. Please copy manually: ' + text);
+      Alert.alert(t('Error'), t('Failed to copy to clipboard. Please copy manually: ') + text);
     }
   };
 
@@ -77,7 +83,7 @@ export default function ProfileScreen() {
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
       
-        <Text style={styles.headerTitle}>Profile</Text>
+        <Text style={styles.headerTitle}>{t('Profile')}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -88,9 +94,9 @@ export default function ProfileScreen() {
           showsHorizontalScrollIndicator={false}
           contentContainerStyle={styles.marqueeContent}
         >
-          <Text style={styles.marqueeText}>Earn points from correct score predictions • </Text>
-          <Text style={styles.marqueeText}>Share your referral link to get bonus points • </Text>
-          <Text style={styles.marqueeText}>Climb ranks: Bronze → Rookie → Intermediate → Pro → Legend • </Text>
+          <Text style={styles.marqueeText}>{t('Earn points from correct score predictions')} • </Text>
+          <Text style={styles.marqueeText}>{t('Share your referral link to get bonus points')} • </Text>
+          <Text style={styles.marqueeText}>{t('Climb ranks: Bronze → Rookie → Intermediate → Pro → Legend')} • </Text>
         </ScrollView>
       </View>
 
@@ -111,11 +117,33 @@ export default function ProfileScreen() {
             {uploadingAvatar ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
-              <Text style={styles.changePhotoText}>Change Photo</Text>
+              <Text style={styles.changePhotoText}>{t('Change Photo')}</Text>
             )}
           </TouchableOpacity>
           <Text style={styles.profileName}>{user?.username || 'User'}</Text>
           <Text style={styles.profileEmail}>{user?.email || ''}</Text>
+        {/* Language */}
+        <View style={styles.sectionCard}>
+          <Text style={styles.sectionTitle}>{t('Language')}</Text>
+          <View style={styles.langRow}>
+            <TouchableOpacity
+              style={[styles.langButton, i18n.language === 'en' && styles.langButtonActive]}
+              onPress={() => setLanguage('en')}
+            >
+              <Text style={[styles.langButtonText, i18n.language === 'en' && styles.langButtonTextActive]}>
+                English
+              </Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.langButton, i18n.language === 'fr' && styles.langButtonActive]}
+              onPress={() => setLanguage('fr')}
+            >
+              <Text style={[styles.langButtonText, i18n.language === 'fr' && styles.langButtonTextActive]}>
+                Français
+              </Text>
+            </TouchableOpacity>
+          </View>
+        </View>
           {user?.country && (
             <Text style={styles.profileMeta}>{user.country}</Text>
           )}
@@ -449,6 +477,38 @@ const styles = StyleSheet.create({
     fontFamily: fonts.heading,
     color: '#FFFFFF',
     marginBottom: 15,
+  },
+  sectionCard: {
+    backgroundColor: '#2D3748',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 16,
+  },
+  langRow: {
+    flexDirection: 'row',
+    gap: 10,
+  },
+  langButton: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 10,
+    backgroundColor: '#1F2937',
+    borderWidth: 1,
+    borderColor: '#374151',
+    alignItems: 'center',
+  },
+  langButtonActive: {
+    backgroundColor: '#2563EB',
+    borderColor: '#60A5FA',
+  },
+  langButtonText: {
+    fontSize: 14,
+    fontFamily: fonts.bodyMedium,
+    color: '#E5E7EB',
+  },
+  langButtonTextActive: {
+    color: '#FFFFFF',
+    fontFamily: fonts.bodySemiBold,
   },
   activityItem: {
     flexDirection: 'row',

@@ -33,6 +33,12 @@ export const API_ENDPOINTS = {
     JOIN_POOL: (id: string) => `${API_BASE_URL}/matches/${id}/pools/join`,
     MY_POOLS: `${API_BASE_URL}/matches/pools/my`,
   },
+  // Bet Payments (Tranzak)
+  BET_PAYMENTS: {
+    BASE: `${API_BASE_URL}/bet-payments`,
+    PAYMENT: `${API_BASE_URL}/bet-payments/payment`,
+    GET_PAYMENT: `${API_BASE_URL}/bet-payments/get-payment`,
+  },
   // Highlights
   HIGHLIGHTS: {
     BASE: `${API_BASE_URL}/highlights`,

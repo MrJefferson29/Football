@@ -13,8 +13,10 @@ import { fonts } from "@/utils/typography"
 import { LinearGradient } from "expo-linear-gradient"
 import { useAuth } from "@/contexts/AuthContext"
 import { useDataCache } from "@/contexts/DataCacheContext"
+import { useTranslation } from "react-i18next"
 
 export default function HomeScreen() {
+  const { t } = useTranslation()
   const { user } = useAuth()
   const { setCacheData, setPreloading } = useDataCache()
   const [homeData, setHomeData] = useState<any>(null)
@@ -239,7 +241,7 @@ export default function HomeScreen() {
         }
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to load data")
+      Alert.alert(t("Error"), error.message || t("Failed to load data"))
     } finally {
       setLoading(false)
     }
@@ -320,10 +322,10 @@ const MarqueeComponent = ({ text }: { text: string }) => {
       const response = await pollsAPI.votePoll(pollId, choice)
       if (response.success) {
         await fetchHomeData() // Refresh data
-        Alert.alert("Success", "Your vote has been recorded!")
+        Alert.alert(t("Success"), t("Your vote has been recorded!"))
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to vote")
+      Alert.alert(t("Error"), error.message || t("Failed to vote"))
     } finally {
       setIsLoading(false)
     }
@@ -335,10 +337,10 @@ const MarqueeComponent = ({ text }: { text: string }) => {
       const response = await pollsAPI.votePoll(pollId, choice)
       if (response.success) {
         await fetchHomeData() // Refresh data
-        Alert.alert("Success", "Your vote has been recorded!")
+        Alert.alert(t("Success"), t("Your vote has been recorded!"))
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to vote")
+      Alert.alert(t("Error"), error.message || t("Failed to vote"))
     } finally {
       setIsLoading(false)
     }
@@ -346,7 +348,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
 
   const handlePrediction = async (pollId: string) => {
     if (!homeGoals || !awayGoals) {
-      Alert.alert("Error", "Please enter both scores!")
+      Alert.alert(t("Error"), t("Please enter both scores!"))
       return
     }
 
@@ -354,7 +356,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
     const awayScore = parseInt(awayGoals)
 
     if (isNaN(homeScore) || isNaN(awayScore)) {
-      Alert.alert("Error", "Please enter valid numbers for both scores!")
+      Alert.alert(t("Error"), t("Please enter valid numbers for both scores!"))
       return
     }
 
@@ -375,7 +377,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
         }, 3000)
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to submit prediction")
+      Alert.alert(t("Error"), error.message || t("Failed to submit prediction"))
     } finally {
       setIsLoading(false)
     }
@@ -412,14 +414,14 @@ const MarqueeComponent = ({ text }: { text: string }) => {
       })
       if (response.success) {
         await fetchHomeData()
-        Alert.alert("Success", "Your bet has been placed in a pool!")
+        Alert.alert(t("Success"), t("Your bet has been placed in a pool!"))
         setShowVotingModal(false)
         setSelectedMatch(null)
       } else {
-        Alert.alert("Error", response.message || "Failed to place bet")
+        Alert.alert(t("Error"), response.message || t("Failed to place bet"))
       }
     } catch (error: any) {
-      Alert.alert("Error", error.message || "Failed to place bet")
+      Alert.alert(t("Error"), error.message || t("Failed to place bet"))
     } finally {
       setIsLoading(false)
     }
@@ -470,8 +472,8 @@ const MarqueeComponent = ({ text }: { text: string }) => {
           >
             <ActivityIndicator size="large" color="#3B82F6" />
           </Animated.View>
-          <Text style={styles.loadingText}>Getting all your data</Text>
-          <Text style={styles.loadingSubtext}>Almost there...</Text>
+          <Text style={styles.loadingText}>{t("Getting all your data")}</Text>
+          <Text style={styles.loadingSubtext}>{t("Almost there...")}</Text>
         </View>
       </SafeAreaView>
     )
@@ -601,9 +603,9 @@ const MarqueeComponent = ({ text }: { text: string }) => {
         {/* Today's Matches */}
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
-            <Text style={styles.sectionTitle}>Today's Matches</Text>
+            <Text style={styles.sectionTitle}>{t("Upcoming Matches")}</Text>
             <TouchableOpacity onPress={() => router.push("/all-matches")}>
-              <Text style={styles.seeAllText}>View All</Text>
+              <Text style={styles.seeAllText}>{t("View All")}</Text>
             </TouchableOpacity>
           </View>
           <View style={styles.matchesCard}>
@@ -622,7 +624,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
                   </View>
                   <View style={styles.matchCenter}>
                     <Text style={styles.matchTime}>{match.matchTime}</Text>
-                    <Text style={styles.voteText}>Tap to vote</Text>
+                    <Text style={styles.voteText}>{t("Tap to vote")}</Text>
                   </View>
                   <View style={styles.matchTeam}>
                     <Text style={styles.matchTeamName}>{match.awayTeam}</Text>
@@ -637,7 +639,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
                 </TouchableOpacity>
               ))
             ) : (
-              <Text style={styles.noDataText}>No matches scheduled for today</Text>
+              <Text style={styles.noDataText}>{t("No upcoming matches available")}</Text>
             )}
           </View>
         </View>
@@ -835,38 +837,38 @@ const MarqueeComponent = ({ text }: { text: string }) => {
 
         {/* Quick Links */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Links</Text>
+          <Text style={styles.sectionTitle}>{t("Quick Links")}</Text>
           <View style={styles.linksGrid}>
             <TouchableOpacity style={styles.linkCard} onPress={() => router.push("/trending")}>
               <View style={styles.linkIconContainer}>
                 <Ionicons name="trending-up" size={24} color="#3B82F6" />
               </View>
-              <Text style={styles.linkTitle}>Trending</Text>
-              <Text style={styles.linkDescription}>Latest highlights & viral moments</Text>
+              <Text style={styles.linkTitle}>{t("Trending")}</Text>
+              <Text style={styles.linkDescription}>{t("Latest highlights & viral moments")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.linkCard} onPress={() => router.push("/news")}>
               <View style={styles.linkIconContainer}>
                 <Ionicons name="newspaper" size={24} color="#3B82F6" />
               </View>
-              <Text style={styles.linkTitle}>News</Text>
-              <Text style={styles.linkDescription}>Breaking football news</Text>
+              <Text style={styles.linkTitle}>{t("News")}</Text>
+              <Text style={styles.linkDescription}>{t("Breaking football news")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.linkCard} onPress={() => router.push("/statistics")}>
               <View style={styles.linkIconContainer}>
                 <Ionicons name="stats-chart" size={24} color="#3B82F6" />
               </View>
-              <Text style={styles.linkTitle}>Statistics</Text>
-              <Text style={styles.linkDescription}>App-wide stats & analytics</Text>
+              <Text style={styles.linkTitle}>{t("Statistics")}</Text>
+              <Text style={styles.linkDescription}>{t("App-wide stats & analytics")}</Text>
             </TouchableOpacity>
 
             <TouchableOpacity style={styles.linkCard} onPress={() => router.push("/my-pools")}>
               <View style={styles.linkIconContainer}>
                 <Ionicons name="wallet" size={24} color="#3B82F6" />
               </View>
-              <Text style={styles.linkTitle}>My Bets</Text>
-              <Text style={styles.linkDescription}>View all your betting pools</Text>
+              <Text style={styles.linkTitle}>{t("My Bets")}</Text>
+              <Text style={styles.linkDescription}>{t("View all your betting pools")}</Text>
             </TouchableOpacity>
           </View>
         </View>

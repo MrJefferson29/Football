@@ -6,8 +6,10 @@ import { router } from 'expo-router';
 import { matchesAPI } from '@/utils/api';
 import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
+import { useTranslation } from 'react-i18next';
 
 export default function MyPoolsScreen() {
+  const { t } = useTranslation();
   const [loading, setLoading] = useState(true);
   const [activePools, setActivePools] = useState<any[]>([]);
   const [pastPools, setPastPools] = useState<any[]>([]);
@@ -39,7 +41,7 @@ export default function MyPoolsScreen() {
         <TouchableOpacity onPress={() => router.back()} style={styles.backButton}>
           <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>My Bets</Text>
+        <Text style={styles.headerTitle}>{t('My Bets')}</Text>
         <View style={styles.placeholder} />
       </View>
 
@@ -49,7 +51,7 @@ export default function MyPoolsScreen() {
           onPress={() => setSelectedTab('active')}
         >
           <Text style={[styles.tabText, selectedTab === 'active' && styles.tabTextActive]}>
-            Active
+            {t('Active')}
           </Text>
         </TouchableOpacity>
         <TouchableOpacity
@@ -57,7 +59,7 @@ export default function MyPoolsScreen() {
           onPress={() => setSelectedTab('past')}
         >
           <Text style={[styles.tabText, selectedTab === 'past' && styles.tabTextActive]}>
-            Past
+            {t('Past')}
           </Text>
         </TouchableOpacity>
       </View>
@@ -65,7 +67,7 @@ export default function MyPoolsScreen() {
       {loading ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#3B82F6" />
-          <Text style={styles.loadingText}>Loading your bets...</Text>
+          <Text style={styles.loadingText}>{t('Loading your bets...')}</Text>
         </View>
       ) : (
         <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
@@ -73,8 +75,8 @@ export default function MyPoolsScreen() {
             <View style={styles.emptyContainer}>
               <Text style={styles.emptyText}>
                 {selectedTab === 'active'
-                  ? 'You have no active bets.'
-                  : 'You have no past bets yet.'}
+                  ? t('You have no active bets.')
+                  : t('You have no past bets yet.')}
               </Text>
             </View>
           ) : (
@@ -94,7 +96,9 @@ export default function MyPoolsScreen() {
                     <Text style={styles.poolName} numberOfLines={1}>
                       {pool.name || 'Prediction Pool'}
                     </Text>
-                    <Text style={styles.stakeTextSmall}>Stake: ₦{pool.amount?.toLocaleString?.() || pool.amount}</Text>
+                    <Text style={styles.stakeTextSmall}>
+                      {t('Stake')}: ₦{pool.amount?.toLocaleString?.() || pool.amount}
+                    </Text>
                   </View>
 
                   <View style={styles.matchRow}>
@@ -127,13 +131,13 @@ export default function MyPoolsScreen() {
                   <View style={styles.chipsRow}>
                     {myEntry && (
                       <View style={styles.myChip}>
-                        <Text style={styles.chipLabel}>Your pick</Text>
+                        <Text style={styles.chipLabel}>{t('Your pick')}</Text>
                         <Text style={styles.chipValue}>
                           {myEntry.prediction === 'home'
-                            ? 'Home win'
+                            ? t('Home win')
                             : myEntry.prediction === 'away'
-                            ? 'Away win'
-                            : 'Draw'}
+                            ? t('Away win')
+                            : t('Draw')}
                         </Text>
                         {myEntry.homeScore != null && myEntry.awayScore != null && (
                           <Text style={styles.chipSub}>
@@ -145,9 +149,9 @@ export default function MyPoolsScreen() {
 
                     {otherParticipants.length > 0 && (
                       <View style={styles.othersChip}>
-                        <Text style={styles.chipLabel}>Other players</Text>
+                        <Text style={styles.chipLabel}>{t('Other players')}</Text>
                         <Text style={styles.chipSub}>
-                          {otherParticipants.length} participant{otherParticipants.length === 1 ? '' : 's'}
+                          {otherParticipants.length} {t('participant')}{otherParticipants.length === 1 ? '' : 's'}
                         </Text>
                       </View>
                     )}

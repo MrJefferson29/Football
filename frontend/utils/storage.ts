@@ -2,6 +2,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 const TOKEN_KEY = '@auth_token';
 const USER_KEY = '@user_data';
+const LANGUAGE_KEY = '@app_language';
 
 export const storage = {
   // Token management
@@ -34,6 +35,15 @@ export const storage = {
   // Clear all auth data
   async clearAuth(): Promise<void> {
     await Promise.all([this.removeToken(), this.removeUser()]);
+  },
+
+  // Language preference
+  async setLanguage(lang: string): Promise<void> {
+    await AsyncStorage.setItem(LANGUAGE_KEY, lang);
+  },
+
+  async getLanguage(): Promise<string | null> {
+    return await AsyncStorage.getItem(LANGUAGE_KEY);
   },
 };
 

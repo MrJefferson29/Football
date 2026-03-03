@@ -16,8 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { fonts } from '@/utils/typography';
+import { useTranslation } from 'react-i18next';
 
 export default function LoginScreen() {
+  const { t } = useTranslation();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -26,7 +28,7 @@ export default function LoginScreen() {
 
   const handleLogin = async () => {
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Error', 'Please fill in all fields');
+      Alert.alert(t('Error'), t('Please fill in all fields'));
       return;
     }
 
@@ -34,7 +36,7 @@ export default function LoginScreen() {
       setLoading(true);
       await login(email.trim(), password);
     } catch (error: any) {
-      Alert.alert('Login Failed', error.message || 'Invalid email or password');
+      Alert.alert(t('Login Failed'), error.message || t('Invalid email or password'));
     } finally {
       setLoading(false);
     }
@@ -53,7 +55,7 @@ export default function LoginScreen() {
           <View style={styles.header}>
             <Ionicons name="football" size={80} color="#3B82F6" />
             <Text style={styles.title}>GAMEFY</Text>
-            <Text style={styles.subtitle}>Sign in to continue</Text>
+            <Text style={styles.subtitle}>{t('Sign in to continue')}</Text>
           </View>
 
           <View style={styles.form}>
@@ -61,7 +63,7 @@ export default function LoginScreen() {
               <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder={t('Email')}
                 placeholderTextColor="#6B7280"
                 value={email}
                 onChangeText={setEmail}
@@ -75,7 +77,7 @@ export default function LoginScreen() {
               <Ionicons name="lock-closed-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Password"
+                placeholder={t('Password')}
                 placeholderTextColor="#6B7280"
                 value={password}
                 onChangeText={setPassword}
@@ -102,14 +104,14 @@ export default function LoginScreen() {
               {loading ? (
                 <ActivityIndicator color="#FFFFFF" />
               ) : (
-                <Text style={styles.loginButtonText}>Sign In</Text>
+                <Text style={styles.loginButtonText}>{t('Sign In')}</Text>
               )}
             </TouchableOpacity>
 
             <View style={styles.footer}>
-              <Text style={styles.footerText}>Don't have an account? </Text>
+              <Text style={styles.footerText}>{t("Don't have an account?")} </Text>
               <TouchableOpacity onPress={() => router.push('/register')}>
-                <Text style={styles.footerLink}>Sign Up</Text>
+                <Text style={styles.footerLink}>{t('Sign Up')}</Text>
               </TouchableOpacity>
             </View>
           </View>

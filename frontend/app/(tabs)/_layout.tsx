@@ -6,6 +6,7 @@ import { Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useFonts } from 'expo-font';
 import * as SplashScreen from 'expo-splash-screen';
+import { useTranslation } from 'react-i18next';
 
 function IoniconsTabBarIcon({
   name,
@@ -29,6 +30,7 @@ function IoniconsTabBarIcon({
 }
 
 export default function TabLayout() {
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
 
   const [fontsLoaded] = useFonts({
@@ -95,7 +97,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
+          title: t('Home'),
           tabBarIcon: ({ color, focused }) => (
             <IoniconsTabBarIcon name="home" color={color} focused={focused} />
           ),
@@ -105,7 +107,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="matches"
         options={{
-          title: 'Matches',
+          title: t('Matches'),
           tabBarIcon: ({ color, focused }) => (
             <IoniconsTabBarIcon name="football" color={color} focused={focused} />
           ),
@@ -115,7 +117,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="local-leagues"
         options={{
-          title: 'Leagues',
+          title: t('Leagues'),
           tabBarIcon: ({ color, focused }) => (
             <IoniconsTabBarIcon name="trophy" color={color} focused={focused} />
           ),
@@ -125,7 +127,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="community"
         options={{
-          title: 'Community',
+          title: t('Community'),
           tabBarIcon: ({ color, focused }) => (
             <IoniconsTabBarIcon name="people" color={color} focused={focused} />
           ),
@@ -136,7 +138,7 @@ export default function TabLayout() {
       <Tabs.Screen
         name="rewards"
         options={{
-          title: 'Predict',
+          title: t('Predict'),
           tabBarIcon: ({ color, focused }) => (
             <IoniconsTabBarIcon
               name="play-circle"

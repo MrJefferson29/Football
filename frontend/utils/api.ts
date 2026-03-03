@@ -253,6 +253,31 @@ export const matchesAPI = {
   },
 };
 
+// Bet Payments API (Tranzak)
+export const betPaymentsAPI = {
+  startPayment: async (data: {
+    amount: number;
+    matchId: string;
+    prediction: 'home' | 'draw' | 'away';
+    stakeLabel?: string;
+    description?: string;
+  }) => {
+    return apiRequest(API_ENDPOINTS.BET_PAYMENTS.PAYMENT, {
+      method: 'POST',
+      body: JSON.stringify({
+        ...data,
+        description: data.description || 'BET_STAKE',
+      }),
+    });
+  },
+  getMyBetPayments: async (matchId?: string) => {
+    return apiRequest(API_ENDPOINTS.BET_PAYMENTS.GET_PAYMENT, {
+      method: 'POST',
+      body: JSON.stringify(matchId ? { matchId } : {}),
+    });
+  },
+};
+
 // Highlights API
 export const highlightsAPI = {
   getHighlights: async (category?: string) => {

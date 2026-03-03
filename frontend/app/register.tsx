@@ -16,8 +16,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '@/contexts/AuthContext';
 import { router } from 'expo-router';
 import { fonts } from '@/utils/typography';
+import { useTranslation } from 'react-i18next';
 
 export default function RegisterScreen() {
+  const { t } = useTranslation();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -32,17 +34,17 @@ export default function RegisterScreen() {
 
   const handleRegister = async () => {
     if (!username.trim() || !email.trim() || !password.trim() || !confirmPassword.trim() || !country.trim() || !age.trim()) {
-      Alert.alert('Error', 'Please fill in all required fields');
+      Alert.alert(t('Error'), t('Please fill in all required fields'));
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match');
+      Alert.alert(t('Error'), t('Passwords do not match'));
       return;
     }
 
     if (password.length < 6) {
-      Alert.alert('Error', 'Password must be at least 6 characters');
+      Alert.alert(t('Error'), t('Password must be at least 6 characters'));
       return;
     }
 
@@ -58,7 +60,7 @@ export default function RegisterScreen() {
         referralCode.trim() || undefined
       );
     } catch (error: any) {
-      Alert.alert('Registration Failed', error.message || 'Could not create account');
+      Alert.alert(t('Registration Failed'), error.message || t('Could not create account'));
     } finally {
       setLoading(false);
     }
@@ -82,8 +84,8 @@ export default function RegisterScreen() {
               <Ionicons name="arrow-back" size={24} color="#FFFFFF" />
             </TouchableOpacity>
             <Ionicons name="person-add-outline" size={80} color="#3B82F6" />
-            <Text style={styles.title}>Create Account</Text>
-            <Text style={styles.subtitle}>Sign up to get started</Text>
+            <Text style={styles.title}>{t('Create Account')}</Text>
+            <Text style={styles.subtitle}>{t('Sign up to get started')}</Text>
           </View>
 
           <View style={styles.form}>
@@ -91,7 +93,7 @@ export default function RegisterScreen() {
               <Ionicons name="person-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Username"
+                placeholder={t('Username')}
                 placeholderTextColor="#6B7280"
                 value={username}
                 onChangeText={setUsername}
@@ -104,7 +106,7 @@ export default function RegisterScreen() {
               <Ionicons name="mail-outline" size={20} color="#9CA3AF" style={styles.inputIcon} />
               <TextInput
                 style={styles.input}
-                placeholder="Email"
+                placeholder={t('Email')}
                 placeholderTextColor="#6B7280"
                 value={email}
                 onChangeText={setEmail}

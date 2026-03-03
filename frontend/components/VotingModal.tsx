@@ -1,21 +1,22 @@
 import { Ionicons } from '@expo/vector-icons';
 import React, { useState, useEffect } from 'react';
 import {
-    ActivityIndicator,
-    Alert,
-    Image,
-    KeyboardAvoidingView,
-    Modal,
-    Platform,
-    ScrollView,
-    StyleSheet,
-    Text,
-    TextInput,
-    TouchableOpacity,
-    View,
+  ActivityIndicator,
+  Alert,
+  Image,
+  KeyboardAvoidingView,
+  Linking,
+  Modal,
+  Platform,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
 } from 'react-native';
 import { getDirectImageUrl } from '@/utils/imageUtils';
-import { matchesAPI } from '@/utils/api';
+import { matchesAPI, betPaymentsAPI } from '@/utils/api';
 
 interface VotingModalProps {
     visible: boolean;
@@ -213,17 +214,56 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                         {/* Stake Selection */}
                         <Text style={styles.sectionTitle}>Select Stake Range</Text>
                         <View style={styles.stakeGrid}>
-                            {PRICE_RANGES.map((range) => (
-                                <TouchableOpacity
-                                    key={range.amount}
-                                    onPress={() => setSelectedRange(range)}
-                                    style={[styles.stakeChip, selectedRange?.amount === range.amount && styles.stakeChipActive]}
-                                >
-                                    <Text style={[styles.stakeText, selectedRange?.amount === range.amount && styles.stakeTextActive]}>
-                                        ₦{range.label}
-                                    </Text>
-                                </TouchableOpacity>
-                            ))}
+                          {PRICE_RANGES.map((range) => (
+                            <TouchableOpacity
+                              key={range.amount}
+                              onPress={async () => {
+                                setSelectedRange(range);
+                                // Trigger Tranzak payment for this stake
+                                try {
+                                  const matchId = match._id || String(match.id);
+                                  const res = await betPaymentsAPI.startPayment({
+                                    amount: range.amount,
+                                    matchId,
+                                    prediction: autoSelectedPrediction || 'home',
+                                    stakeLabel: range.label,
+                                  });
+
+                                  if (res.success && res.paymentUrl) {
+                                    const supported = await Linking.canOpenURL(res.paymentUrl);
+                                    if (supported) {
+                                      await Linking.openURL(res.paymentUrl);
+                                    } else {
+                                      Alert.alert('Error', 'Cannot open payment URL.');
+                                    }
+                                  } else if (res.paymentUrl) {
+                                    const supported = await Linking.canOpenURL(res.paymentUrl);
+                                    if (supported) {
+                                      await Linking.openURL(res.paymentUrl);
+                                    }
+                                  }
+                                } catch (err: any) {
+                                  Alert.alert(
+                                    'Payment Error',
+                                    err?.message || 'Failed to start payment. Please try again.'
+                                  );
+                                }
+                              }}
+                              style={[
+                                styles.stakeChip,
+                                selectedRange?.amount === range.amount && styles.stakeChipActive,
+                              ]}
+                            >
+                              <Text
+                                style={[
+                                  styles.stakeText,
+                                  selectedRange?.amount === range.amount && styles.stakeTextActive,
+                                ]}
+                              >
+                                ₦{range.label}
+                              </Text>
+                            </TouchableOpacity>
+                          ))}
                         </View>
 
                         {/* Pool Status Information & List */}

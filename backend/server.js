@@ -45,6 +45,7 @@ app.use('/api/prediction-forums', require('./routes/predictionForums'));
 app.use('/api/predictions', require('./routes/predictions'));
 app.use('/api/forum-messages', require('./routes/forumMessages'));
 app.use('/api/forum-join-requests', require('./routes/forumJoinRequests'));
+app.use('/api/bet-payments', require('./routes/betPayments'));
 
 // Socket.io for real-time chat
 io.on('connection', (socket) => {

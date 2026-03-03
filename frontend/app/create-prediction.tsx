@@ -289,7 +289,6 @@ export default function CreatePredictionScreen() {
             )}
           </View>
 
-          {/* Teams Section */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Teams</Text>
             

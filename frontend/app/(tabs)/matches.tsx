@@ -8,8 +8,10 @@ import { fonts } from '@/utils/typography';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useDataCache } from '@/contexts/DataCacheContext';
+import { useTranslation } from 'react-i18next';
 
 export default function MatchesScreen() {
+  const { t } = useTranslation();
   const { getCacheData, setCacheData, isCached } = useDataCache();
   const [selectedLeague, setSelectedLeague] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -212,7 +214,7 @@ export default function MatchesScreen() {
       }
     } catch (error: any) {
       if (!cachedData) {
-        Alert.alert('Error', error.message || 'Failed to load matches');
+        Alert.alert(t('Error'), error.message || t('Failed to load matches'));
       }
     } finally {
       setLoading(false);
@@ -303,7 +305,7 @@ export default function MatchesScreen() {
       <ScrollView style={styles.scrollView} showsVerticalScrollIndicator={false}>
         {/* Header */}
         <View style={styles.header}>
-          <Text style={styles.headerTitle}>Leagues & Matches</Text>
+          <Text style={styles.headerTitle}>{t('Leagues & Matches')}</Text>
           <View>
             <TouchableOpacity style={styles.liveMatchButton} onPress={() => router.navigate('/all-live-matches')}>
               <Text style={styles.liveMatchText}>Live</Text>
@@ -316,11 +318,11 @@ export default function MatchesScreen() {
         {loading && leagues.length === 0 ? (
           <View style={styles.loadingContainer}>
             <ActivityIndicator size="large" color="#3B82F6" />
-            <Text style={styles.loadingText}>Loading leagues...</Text>
+            <Text style={styles.loadingText}>{t('Loading leagues...')}</Text>
           </View>
         ) : (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Active Leagues</Text>
+            <Text style={styles.sectionTitle}>{t('Active Leagues')}</Text>
             <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.leaguesScroll}>
               {leagues.map((leagueName) => {
                 const config = leagueConfig[leagueName] || { logo: '⚽', color: '#3B82F6', fullName: leagueName };
@@ -375,7 +377,7 @@ export default function MatchesScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>
-              {selectedLeague ? (leagueConfig[selectedLeague]?.fullName || selectedLeague) : 'All'} - Fixtures & Results
+              {selectedLeague ? (leagueConfig[selectedLeague]?.fullName || selectedLeague) : t('All')} - {t('Fixtures & Results')}
             </Text>
             {/* <TouchableOpacity 
               style={styles.oddsToggle}
@@ -389,7 +391,7 @@ export default function MatchesScreen() {
           {loading ? (
             <View style={styles.loadingContainer}>
               <ActivityIndicator size="large" color="#3B82F6" />
-              <Text style={styles.loadingText}>Loading matches...</Text>
+              <Text style={styles.loadingText}>{t('Loading matches...')}</Text>
             </View>
           ) : filteredFixtures.length > 0 ? (
             filteredFixtures.map((fixture: any) => {
@@ -423,13 +425,13 @@ export default function MatchesScreen() {
                       {votingDisabled && hasScore ? (
                         <Text style={styles.score}>{fixture.homeScore} - {fixture.awayScore}</Text>
                       ) : votingDisabled ? (
-                        <Text style={styles.time}>Finished</Text>
+                        <Text style={styles.time}>{t('Finished')}</Text>
                       ) : hasScore ? (
                         <Text style={styles.score}>{fixture.homeScore} - {fixture.awayScore}</Text>
                       ) : (
                         <Text style={styles.time}>{formatTime24Hour(fixture.matchTime)}</Text>
                       )}
-                      {!votingDisabled && <Text style={styles.voteText}>Tap to vote</Text>}
+                      {!votingDisabled && <Text style={styles.voteText}>{t('Tap to vote')}</Text>}
                     </View>
                     <View style={styles.team}>
                       <Text style={styles.teamName}>{fixture.awayTeam}</Text>
@@ -448,7 +450,7 @@ export default function MatchesScreen() {
             })
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>No matches available</Text>
+              <Text style={styles.emptyText}>{t('No matches available')}</Text>
             </View>
           )}
         </View>
