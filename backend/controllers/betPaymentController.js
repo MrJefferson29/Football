@@ -2,6 +2,7 @@ const tranzak = require('tranzak-node').default;
 const shortUUID = require('short-uuid');
 const BetPayment = require('../models/BetPayment');
 const User = require('../models/User');
+const { doJoinMatchPool } = require('./matchController');
 
 require('dotenv').config();
 
@@ -24,7 +25,7 @@ function extractRidFromUrl(url) {
   }
 }
 
-// @desc    Start a bet payment via Tranzak
+// @desc    Start bet payment on Confirm Entry; place bet only after payment succeeds
 // @route   POST /api/bet-payments/payment
 // @access  Private
 exports.processBetPayment = async (req, res) => {
@@ -34,6 +35,9 @@ exports.processBetPayment = async (req, res) => {
       matchId,
       prediction,
       stakeLabel,
+      homeScore,
+      awayScore,
+      poolId,
       description = 'BET_STAKE',
       mobileWalletNumber = process.env.TRANZAK_DEFAULT_WALLET || '',
     } = req.body;
@@ -46,7 +50,6 @@ exports.processBetPayment = async (req, res) => {
     }
 
     if (!amount || !matchId || !prediction) {
-      console.error('Missing required fields for bet payment:', req.body);
       return res.status(400).json({ success: false, error: 'amount, matchId and prediction are required.' });
     }
 
@@ -54,6 +57,44 @@ exports.processBetPayment = async (req, res) => {
       return res.status(400).json({ success: false, error: 'Missing mobile wallet number.' });
     }
 
+    const numericAmount = Number(amount);
+
+    // If user already has a completed payment for this bet, join pool immediately (e.g. after redirect)
+    const existingPaid = await BetPayment.findOne({
+      user: userId,
+      match: matchId,
+      amount: numericAmount,
+      prediction,
+      status: 'completed',
+      usedForPool: false,
+    }).sort({ createdAt: -1 });
+
+    if (existingPaid) {
+      try {
+        const pool = await doJoinMatchPool(
+          userId,
+          matchId,
+          amount,
+          prediction,
+          homeScore,
+          awayScore,
+          poolId
+        );
+        return res.status(200).json({
+          success: true,
+          joinedPool: true,
+          message: 'Bet placed successfully.',
+          data: pool,
+        });
+      } catch (joinErr) {
+        return res.status(joinErr.statusCode || 400).json({
+          success: false,
+          error: joinErr.message,
+        });
+      }
+    }
+
+    // No completed payment: initiate Tranzak payment
     console.log('Initiating bet payment:', { userId, email, amount, matchId, prediction });
 
     const transaction = await client.payment.collection.simple.chargeMobileMoney({
@@ -68,8 +109,6 @@ exports.processBetPayment = async (req, res) => {
     if (transaction.refresh) {
       await transaction.refresh();
     }
-
-    console.log('Bet transaction response:', JSON.stringify(transaction, null, 2));
 
     const status = transaction.data ? transaction.data.status : null;
     const initialTransactionId = transaction.data
@@ -93,24 +132,35 @@ exports.processBetPayment = async (req, res) => {
     }
 
     if (status === 'SUCCESSFUL' || status === 'COMPLETED') {
-      console.log('Bet transaction fully successful:', initialTransactionId);
-
       await BetPayment.findOneAndUpdate(
         { transactionId: initialTransactionId },
         { status: 'completed' }
       );
-
-      return res.status(200).json({
-        success: true,
-        message: 'Payment processed successfully.',
-        transactionId: initialTransactionId,
-        paymentUrl: null,
-      });
+      try {
+        const pool = await doJoinMatchPool(
+          userId,
+          matchId,
+          amount,
+          prediction,
+          homeScore,
+          awayScore,
+          poolId
+        );
+        return res.status(200).json({
+          success: true,
+          joinedPool: true,
+          message: 'Payment successful. Bet placed.',
+          data: pool,
+        });
+      } catch (joinErr) {
+        return res.status(joinErr.statusCode || 400).json({
+          success: false,
+          error: joinErr.message,
+        });
+      }
     }
 
     if (status === 'PAYMENT_IN_PROGRESS') {
-      console.log('Bet payment in progress, starting web redirect:', initialTransactionId);
-
       const webTransaction = await client.payment.collection.simple.chargeByWebRedirect({
         mchTransactionRef: shortUUID.generate(),
         amount,
@@ -119,39 +169,26 @@ exports.processBetPayment = async (req, res) => {
       });
 
       if (
-        !webTransaction ||
-        !webTransaction.data ||
-        !webTransaction.data.links ||
-        !webTransaction.data.links.paymentAuthUrl
+        webTransaction?.data?.links?.paymentAuthUrl
       ) {
-        console.error('Web transaction missing payment URL:', webTransaction);
+        const paymentUrl = webTransaction.data.links.paymentAuthUrl;
+        const redirectTransactionId = extractRidFromUrl(paymentUrl);
+        if (redirectTransactionId) {
+          await BetPayment.findOneAndUpdate(
+            { transactionId: initialTransactionId },
+            { redirectTransactionId }
+          );
+        }
         return res.status(202).json({
           success: true,
-          message: 'Payment is in progress. Please wait for completion.',
-          transactionId: initialTransactionId,
-          paymentUrl: null,
+          joinedPool: false,
+          message: 'Complete payment in the browser, then tap Confirm Entry again to place your bet.',
+          paymentUrl,
         });
       }
-
-      const paymentUrl = webTransaction.data.links.paymentAuthUrl;
-      const redirectTransactionId = extractRidFromUrl(paymentUrl);
-
-      if (redirectTransactionId) {
-        await BetPayment.findOneAndUpdate(
-          { transactionId: initialTransactionId },
-          { redirectTransactionId }
-        );
-      }
-
-      return res.status(202).json({
-        success: true,
-        message: 'Redirect user to complete payment.',
-        transactionId: initialTransactionId,
-        paymentUrl,
-      });
     }
 
-    console.log('Fallback web redirect for bet transaction. Status:', status);
+    // Fallback: web redirect
     const webTransaction = await client.payment.collection.simple.chargeByWebRedirect({
       mchTransactionRef: shortUUID.generate(),
       amount,
@@ -159,21 +196,16 @@ exports.processBetPayment = async (req, res) => {
       description,
     });
 
-    if (
-      !webTransaction ||
-      !webTransaction.data ||
-      !webTransaction.data.links ||
-      !webTransaction.data.links.paymentAuthUrl
-    ) {
-      console.error('Fallback web transaction missing payment URL:', webTransaction);
-      return res.status(500).json({ success: false, error: 'Payment redirection failed.' });
+    if (webTransaction?.data?.links?.paymentAuthUrl) {
+      return res.status(202).json({
+        success: true,
+        joinedPool: false,
+        message: 'Redirect to complete payment.',
+        paymentUrl: webTransaction.data.links.paymentAuthUrl,
+      });
     }
 
-    return res.status(202).json({
-      success: true,
-      message: 'Redirect user to complete payment.',
-      paymentUrl: webTransaction.data.links.paymentAuthUrl,
-    });
+    return res.status(500).json({ success: false, error: 'Payment redirection failed.' });
   } catch (error) {
     console.error('Error processing bet payment:', error);
     return res.status(500).json({ success: false, error: 'Payment processing failed.' });

@@ -116,7 +116,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
             .finally(() => setPoolsLoading(false));
     }, [visible, selectedRange, autoSelectedPrediction, match._id, match.id]);
 
-    const handleVote = async () => {
+    const handleConfirmEntry = async () => {
         const h = parseInt(homeScore, 10);
         const a = parseInt(awayScore, 10);
 
@@ -124,20 +124,43 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
             Alert.alert('Incomplete', 'Please fill in both scores and select a stake.');
             return;
         }
+        if (!mobileWalletNumber.trim()) {
+            Alert.alert('Incomplete', 'Please enter your mobile money number.');
+            return;
+        }
 
+        const matchId = match._id || String(match.id);
         setIsLoading(true);
         try {
-            await onVote(
-              match._id || String(match.id),
-              autoSelectedPrediction,
-              h,
-              a,
-              selectedRange.amount,
-              selectedPoolId || undefined
-            );
-            onClose();
-        } catch (error) {
-            Alert.alert('Error', 'Failed to submit prediction.');
+            const res = await betPaymentsAPI.startPayment({
+                amount: selectedRange.amount,
+                matchId,
+                prediction: autoSelectedPrediction,
+                mobileWalletNumber: mobileWalletNumber.trim(),
+                stakeLabel: selectedRange.label,
+                homeScore: h,
+                awayScore: a,
+                poolId: selectedPoolId || undefined,
+            });
+
+            if (res.success && res.joinedPool && res.data) {
+                onClose();
+                return;
+            }
+            if (res.success && res.paymentUrl) {
+                const supported = await Linking.canOpenURL(res.paymentUrl);
+                if (supported) {
+                    await Linking.openURL(res.paymentUrl);
+                }
+                Alert.alert(
+                    'Complete payment',
+                    'Complete payment in the browser, then return here and tap Confirm Entry again to place your bet.'
+                );
+                return;
+            }
+            Alert.alert('Error', (res as any)?.error || 'Something went wrong.');
+        } catch (err: any) {
+            Alert.alert('Error', err?.message || 'Payment failed. Please try again.');
         } finally {
             setIsLoading(false);
         }
@@ -225,53 +248,13 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                           maxLength={15}
                         />
 
-                        {/* Stake Selection */}
+                        {/* Stake Selection – only selects; payment runs on Confirm Entry */}
                         <Text style={styles.sectionTitle}>Select Stake Range</Text>
                         <View style={styles.stakeGrid}>
                           {PRICE_RANGES.map((range) => (
                             <TouchableOpacity
                               key={range.amount}
-                              onPress={async () => {
-                                if (!mobileWalletNumber.trim()) {
-                                  Alert.alert(
-                                    'Missing number',
-                                    'Please enter your mobile money number before choosing a stake.'
-                                  );
-                                  return;
-                                }
-
-                                setSelectedRange(range);
-                                // Trigger Tranzak payment for this stake
-                                try {
-                                  const matchId = match._id || String(match.id);
-                                  const res = await betPaymentsAPI.startPayment({
-                                    amount: range.amount,
-                                    matchId,
-                                    prediction: autoSelectedPrediction || 'home',
-                                    mobileWalletNumber: mobileWalletNumber.trim(),
-                                    stakeLabel: range.label,
-                                  });
-
-                                  if (res.success && res.paymentUrl) {
-                                    const supported = await Linking.canOpenURL(res.paymentUrl);
-                                    if (supported) {
-                                      await Linking.openURL(res.paymentUrl);
-                                    } else {
-                                      Alert.alert('Error', 'Cannot open payment URL.');
-                                    }
-                                  } else if (res.paymentUrl) {
-                                    const supported = await Linking.canOpenURL(res.paymentUrl);
-                                    if (supported) {
-                                      await Linking.openURL(res.paymentUrl);
-                                    }
-                                  }
-                                } catch (err: any) {
-                                  Alert.alert(
-                                    'Payment Error',
-                                    err?.message || 'Failed to start payment. Please try again.'
-                                  );
-                                }
-                              }}
+                              onPress={() => setSelectedRange(range)}
                               style={[
                                 styles.stakeChip,
                                 selectedRange?.amount === range.amount && styles.stakeChipActive,
@@ -369,7 +352,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                         <View style={styles.footer}>
                             <TouchableOpacity
                                 style={[styles.submitButton, (!selectedRange || !autoSelectedPrediction) && styles.submitButtonDisabled]}
-                                onPress={handleVote}
+                                onPress={handleConfirmEntry}
                                 disabled={!selectedRange || !autoSelectedPrediction || isLoading}
                             >
                                 {isLoading ? <ActivityIndicator color="#FFF" /> : <Text style={styles.submitButtonText}>Confirm Entry</Text>}

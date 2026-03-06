@@ -255,7 +255,7 @@ export const matchesAPI = {
   },
 };
 
-// Bet Payments API (Tranzak)
+// Bet Payments API (Tranzak) – call on Confirm Entry; bet is placed only after payment succeeds
 export const betPaymentsAPI = {
   startPayment: async (data: {
     amount: number;
@@ -264,6 +264,9 @@ export const betPaymentsAPI = {
     mobileWalletNumber: string;
     stakeLabel?: string;
     description?: string;
+    homeScore?: number;
+    awayScore?: number;
+    poolId?: string;
   }) => {
     return apiRequest(API_ENDPOINTS.BET_PAYMENTS.PAYMENT, {
       method: 'POST',

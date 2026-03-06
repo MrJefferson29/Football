@@ -604,196 +604,160 @@ exports.getMatchPools = async (req, res) => {
 // Helper: validate allowed betting amounts
 const ALLOWED_BET_AMOUNTS = [1000, 2000, 5000, 10000, 50000, 100000];
 
-// @desc    Join or create a betting pool for a match
-//          If poolId is provided, attempt to join that specific pool
+// Shared logic: join or create pool for a user who has a completed payment. Throws on validation error.
+async function doJoinMatchPool(userId, matchId, amount, prediction, homeScore, awayScore, poolId) {
+  const numericAmount = Number(amount);
+  if (!ALLOWED_BET_AMOUNTS.includes(numericAmount)) {
+    const e = new Error('Invalid betting amount selected');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (!['home', 'draw', 'away'].includes(prediction)) {
+    const e = new Error('Invalid prediction value');
+    e.statusCode = 400;
+    throw e;
+  }
+  const match = await Match.findById(matchId);
+  if (!match) {
+    const e = new Error('Match not found');
+    e.statusCode = 404;
+    throw e;
+  }
+  if (match.status === 'finished') {
+    const e = new Error('Betting is closed for finished matches');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (isVotingDisabled(match)) {
+    const e = new Error('Betting for this match has ended. Betting closes 100 minutes after match start time.');
+    e.statusCode = 400;
+    throw e;
+  }
+  const paidBet = await BetPayment.findOne({
+    user: userId,
+    match: matchId,
+    amount: numericAmount,
+    prediction,
+    status: 'completed',
+    usedForPool: false,
+  }).sort({ createdAt: -1 });
+  if (!paidBet) {
+    const e = new Error('You must complete payment for this stake before joining a pool.');
+    e.statusCode = 400;
+    throw e;
+  }
+  const existingParticipation = await MatchBetPool.findOne({
+    match: matchId,
+    amount: numericAmount,
+    'participants.user': userId,
+    'participants.prediction': prediction,
+  });
+  if (existingParticipation) {
+    const e = new Error('You already have a bet with this prediction and amount for this match');
+    e.statusCode = 400;
+    throw e;
+  }
+  let pool = null;
+  if (poolId) {
+    const found = await MatchBetPool.findById(poolId);
+    if (
+      found &&
+      String(found.match) === String(matchId) &&
+      found.amount === numericAmount &&
+      !found.isClosed &&
+      Array.isArray(found.participants) &&
+      found.participants.length < 3
+    ) {
+      pool = found;
+    }
+  }
+  if (!pool) {
+    const candidatePools = await MatchBetPool.find({
+      match: matchId,
+      amount: numericAmount,
+      isClosed: false,
+    }).sort({ createdAt: 1 });
+    pool =
+      candidatePools.find(
+        (p) =>
+          Array.isArray(p.participants) &&
+          p.participants.length > 0 &&
+          p.participants.length < 3 &&
+          p.participants.some((part) => part.prediction !== prediction)
+      ) || null;
+  }
+  if (!pool) {
+    pool = new MatchBetPool({
+      match: matchId,
+      amount: numericAmount,
+      participants: [],
+      isClosed: false,
+    });
+  }
+  const alreadyInPool =
+    pool.participants &&
+    pool.participants.some((p) => String(p.user) === String(userId));
+  if (alreadyInPool) {
+    const e = new Error('You are already in this pool');
+    e.statusCode = 400;
+    throw e;
+  }
+  if (pool.participants.length >= 3) {
+    pool.isClosed = true;
+    await pool.save();
+    const e = new Error('This pool is already full. Please try again.');
+    e.statusCode = 400;
+    throw e;
+  }
+  pool.participants.push({
+    user: userId,
+    prediction,
+    homeScore: homeScore !== undefined ? homeScore : null,
+    awayScore: awayScore !== undefined ? awayScore : null,
+  });
+  if (pool.participants.length >= 3) {
+    pool.isClosed = true;
+  }
+  await pool.save();
+  await BetPayment.findByIdAndUpdate(paidBet._id, {
+    usedForPool: true,
+    pool: pool._id,
+  });
+  const populatedPool = await MatchBetPool.findById(pool._id).populate(
+    'participants.user',
+    'username avatar'
+  );
+  return populatedPool;
+}
+
+exports.doJoinMatchPool = doJoinMatchPool;
+
+// @desc    Join or create a betting pool for a match (requires completed payment)
 // @route   POST /api/matches/:id/pools/join
 // @access  Private
 exports.joinMatchPool = async (req, res) => {
   try {
     const { id } = req.params;
     const { amount, prediction, homeScore, awayScore, poolId } = req.body;
-
     if (!amount || !prediction) {
       return res.status(400).json({
         success: false,
         message: 'Amount and prediction are required',
       });
     }
-
-    const numericAmount = Number(amount);
-    if (!ALLOWED_BET_AMOUNTS.includes(numericAmount)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid betting amount selected',
-      });
-    }
-
-    if (!['home', 'draw', 'away'].includes(prediction)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Invalid prediction value',
-      });
-    }
-
-    const match = await Match.findById(id);
-    if (!match) {
-      return res.status(404).json({
-        success: false,
-        message: 'Match not found',
-      });
-    }
-
-    if (match.status === 'finished') {
-      return res.status(400).json({
-        success: false,
-        message: 'Betting is closed for finished matches',
-      });
-    }
-
-    // Reuse voting deadline logic to also limit betting
-    if (isVotingDisabled(match)) {
-      return res.status(400).json({
-        success: false,
-        message: 'Betting for this match has ended. Betting closes 100 minutes after match start time.',
-      });
-    }
-
-    // Ensure the user has a completed Tranzak payment for this bet
-    const paidBet = await BetPayment.findOne({
-      user: req.user.id,
-      match: id,
-      amount: numericAmount,
+    const pool = await doJoinMatchPool(
+      req.user.id,
+      id,
+      amount,
       prediction,
-      status: 'completed',
-      usedForPool: false,
-    }).sort({ createdAt: -1 });
-
-    if (!paidBet) {
-      return res.status(400).json({
-        success: false,
-        message: 'You must complete payment for this stake before joining a pool.',
-      });
-    }
-
-    // Avoid duplicate participation in the same match/amount with the same prediction
-    const existingParticipation = await MatchBetPool.findOne({
-      match: id,
-      amount: numericAmount,
-      'participants.user': req.user.id,
-      'participants.prediction': prediction,
-    });
-
-    if (existingParticipation) {
-      return res.status(400).json({
-        success: false,
-        message: 'You already have a bet with this prediction and amount for this match',
-      });
-    }
-
-    let pool = null;
-
-    // If a specific poolId is provided, try to join that pool first
-    if (poolId) {
-      const found = await MatchBetPool.findById(poolId);
-      if (
-        found &&
-        String(found.match) === String(id) &&
-        found.amount === numericAmount &&
-        !found.isClosed &&
-        Array.isArray(found.participants) &&
-        found.participants.length < 3
-      ) {
-        pool = found;
-      }
-    }
-
-    // If no specific pool chosen or it was invalid, auto-select a candidate pool
-    if (!pool) {
-      // Try to find an open pool to join:
-      // - same match and amount
-      // - not closed
-      // - has at least one participant (so you are joining an existing pool)
-      // - has at least one participant whose prediction is different from this user's
-      // - has fewer than 3 participants
-      const candidatePools = await MatchBetPool.find({
-        match: id,
-        amount: numericAmount,
-        isClosed: false,
-      }).sort({ createdAt: 1 });
-
-      pool =
-        candidatePools.find(
-          (p) =>
-            Array.isArray(p.participants) &&
-            p.participants.length > 0 &&
-            p.participants.length < 3 &&
-            p.participants.some((part) => part.prediction !== prediction)
-        ) || null;
-    }
-
-    // If none found, create a fresh pool with this user as first participant
-    if (!pool) {
-      pool = new MatchBetPool({
-        match: id,
-        amount: numericAmount,
-        participants: [],
-        isClosed: false,
-      });
-    }
-
-    // Ensure user is not already in this specific pool
-    const alreadyInPool =
-      pool.participants &&
-      pool.participants.some((p) => String(p.user) === String(req.user.id));
-
-    if (alreadyInPool) {
-      return res.status(400).json({
-        success: false,
-        message: 'You are already in this pool',
-      });
-    }
-
-    if (pool.participants.length >= 3) {
-      pool.isClosed = true;
-      await pool.save();
-      return res.status(400).json({
-        success: false,
-        message: 'This pool is already full. Please try again.',
-      });
-    }
-
-    // Append this participant
-    pool.participants.push({
-      user: req.user.id,
-      prediction,
-      homeScore: homeScore !== undefined ? homeScore : null,
-      awayScore: awayScore !== undefined ? awayScore : null,
-    });
-
-    // Close pool once it has 3 participants
-    if (pool.participants.length >= 3) {
-      pool.isClosed = true;
-    }
-
-    await pool.save();
-
-    // Mark the payment record as used for this pool
-    await BetPayment.findByIdAndUpdate(paidBet._id, {
-      usedForPool: true,
-      pool: pool._id,
-    });
-
-    const populatedPool = await MatchBetPool.findById(pool._id).populate(
-      'participants.user',
-      'username avatar'
+      homeScore,
+      awayScore,
+      poolId
     );
-
-    res.status(200).json({
-      success: true,
-      data: populatedPool,
-    });
+    res.status(200).json({ success: true, data: pool });
   } catch (error) {
-    res.status(500).json({
+    const status = error.statusCode || 500;
+    res.status(status).json({
       success: false,
       message: error.message,
     });
