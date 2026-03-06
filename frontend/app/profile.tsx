@@ -1,7 +1,15 @@
 import { Ionicons } from '@expo/vector-icons';
-import { router } from 'expo-router';
-import React, { useState, useEffect } from 'react';
-import { Image, ScrollView, StyleSheet, Text, TouchableOpacity, View, Alert, ActivityIndicator, Platform } from 'react-native';
+import React, { useState } from 'react';
+import {
+  Image,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TouchableOpacity,
+  View,
+  Alert,
+  ActivityIndicator,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '@/contexts/AuthContext';
 import { fonts } from '@/utils/typography';
@@ -13,17 +21,9 @@ import { setLanguage } from '@/i18n';
 
 export default function ProfileScreen() {
   const { t, i18n } = useTranslation();
+  const { user, logout, updateProfile } = useAuth();
   const [activeTab, setActiveTab] = useState('profile');
   const [uploadingAvatar, setUploadingAvatar] = useState(false);
-  const { user, logout, updateProfile } = useAuth();
-
-  const rewards = [
-    { id: 1, title: 'Prediction Master', description: 'Make 100 correct predictions', icon: '🏆', unlocked: true, progress: 100 },
-    { id: 2, title: 'Streak King', description: 'Maintain a 10-day prediction streak', icon: '🔥', unlocked: false, progress: 80 },
-    { id: 3, title: 'Accuracy Expert', description: 'Achieve 85% prediction accuracy', icon: '🎯', unlocked: false, progress: 78 },
-    { id: 4, title: 'Community Star', description: 'Get 50 likes on your predictions', icon: '⭐', unlocked: false, progress: 35 },
-    { id: 5, title: 'Early Bird', description: 'Make predictions 24 hours before matches', icon: '🐦', unlocked: true, progress: 100 },
-  ];
 
   const points = user?.points ?? 0;
   const accuracy = user?.accuracy ?? 0;
@@ -32,294 +32,243 @@ export default function ProfileScreen() {
   const correctPredictions = user?.correctPredictions ?? 0;
   const referrals = user?.referrals ?? 0;
   const referralCode = user?.referralCode || '';
-  const referralLink = referralCode ? `https://fanarena.app/register?ref=${referralCode}` : '—';
-  const streak = 0;
+  const referralLink = referralCode
+    ? `https://fanarena.app/register?ref=${referralCode}`
+    : '—';
 
   const handleChangePhoto = async () => {
     try {
-      const { status } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      const { status } =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
       if (status !== 'granted') {
-        Alert.alert(t('Permission needed'), t('Please allow photo access to change your avatar.'));
+        Alert.alert(
+          t('Permission needed'),
+          t('Please allow photo access to change your avatar.')
+        );
         return;
       }
+
       const result = await ImagePicker.launchImageLibraryAsync({
         mediaTypes: ImagePicker.MediaTypeOptions.Images,
         allowsEditing: true,
         aspect: [1, 1],
         quality: 0.8,
       });
+
       if (result.canceled || !result.assets[0]) return;
 
       setUploadingAvatar(true);
-      const uploadRes = await uploadAPI.uploadImage(result.assets[0].uri, 'avatars');
+      const uploadRes = await uploadAPI.uploadImage(
+        result.assets[0].uri,
+        'avatars'
+      );
+
       if (uploadRes.success && uploadRes.data?.url) {
         await updateProfile({ avatar: uploadRes.data.url });
         Alert.alert(t('Success'), t('Profile photo updated.'));
       } else {
-        throw new Error(uploadRes.message || t('Failed to upload image'));
+        throw new Error(uploadRes.message);
       }
     } catch (error: any) {
-      console.error('Avatar update error:', error);
-      Alert.alert(t('Error'), error.message || t('Failed to update photo'));
+      Alert.alert(t('Error'), error.message);
     } finally {
       setUploadingAvatar(false);
     }
   };
 
-  const copyToClipboard = async (text: string, type: 'code' | 'link' = 'code') => {
-    try {
-      await Clipboard.setStringAsync(text);
-      Alert.alert(
-        t('Copied!'),
-        `${type === 'code' ? t('Referral code') : t('Referral link')} ${t('copied to clipboard')}`
-      );
-    } catch (error: any) {
-      console.error('Copy error:', error);
-      Alert.alert(t('Error'), t('Failed to copy to clipboard. Please copy manually: ') + text);
-    }
+  const copyToClipboard = async (text: string) => {
+    await Clipboard.setStringAsync(text);
+    Alert.alert(t('Copied!'), t('Copied to clipboard'));
+  };
+
+  const confirmLogout = () => {
+    Alert.alert('Logout', 'Are you sure you want to logout?', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Logout', style: 'destructive', onPress: logout },
+    ]);
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <View style={styles.header}>
-      
-        <Text style={styles.headerTitle}>{t('Profile')}</Text>
-        <View style={styles.placeholder} />
-      </View>
+      <ScrollView showsVerticalScrollIndicator={false}>
+        {/* Header */}
+        <View style={styles.header}>
+          <Text style={styles.headerTitle}>{t('Profile')}</Text>
+        </View>
 
-      {/* Marquee / highlights */}
-      <View style={styles.marqueeContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.marqueeContent}
-        >
-          <Text style={styles.marqueeText}>{t('Earn points from correct score predictions')} • </Text>
-          <Text style={styles.marqueeText}>{t('Share your referral link to get bonus points')} • </Text>
-          <Text style={styles.marqueeText}>{t('Climb ranks: Bronze → Rookie → Intermediate → Pro → Legend')} • </Text>
-        </ScrollView>
-      </View>
-
-      <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {/* Profile Info */}
+        {/* Profile Section */}
         <View style={styles.profileSection}>
-          <Image
-            source={{
-              uri: user?.avatar || "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&h=150&fit=crop&crop=face",
-            }}
-            style={styles.profileAvatar}
-          />
+          <View style={styles.avatarWrapper}>
+            <Image
+              source={{
+                uri:
+                  user?.avatar ||
+                  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150',
+              }}
+              style={styles.profileAvatar}
+            />
+          </View>
+
           <TouchableOpacity
             style={styles.changePhotoButton}
             onPress={handleChangePhoto}
+            activeOpacity={0.85}
             disabled={uploadingAvatar}
           >
             {uploadingAvatar ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
+              <ActivityIndicator color="#FFF" />
             ) : (
-              <Text style={styles.changePhotoText}>{t('Change Photo')}</Text>
+              <Text style={styles.changePhotoText}>
+                {t('Change Photo')}
+              </Text>
             )}
           </TouchableOpacity>
-          <Text style={styles.profileName}>{user?.username || 'User'}</Text>
-          <Text style={styles.profileEmail}>{user?.email || ''}</Text>
-        {/* Language */}
+
+          <Text style={styles.profileName}>
+            {user?.username || 'User'}
+          </Text>
+
+          <View style={styles.levelBadge}>
+            <Text style={styles.levelText}>{rank} Tier</Text>
+          </View>
+
+          <Text style={styles.profileEmail}>
+            {user?.email || ''}
+          </Text>
+        </View>
+
+        {/* Stats Grid */}
+        <View style={styles.statsGrid}>
+          {[
+            { label: 'Points', value: points },
+            { label: 'Accuracy', value: `${accuracy}%` },
+            { label: 'Predictions', value: totalPredictions },
+            { label: 'Correct Picks', value: correctPredictions },
+            { label: 'Referrals', value: referrals },
+          ].map((item, index) => (
+            <View key={index} style={styles.statCard}>
+              <Text style={styles.statValue}>{item.value}</Text>
+              <Text style={styles.statLabel}>{item.label}</Text>
+            </View>
+          ))}
+        </View>
+
+        {/* Language Section */}
         <View style={styles.sectionCard}>
           <Text style={styles.sectionTitle}>{t('Language')}</Text>
           <View style={styles.langRow}>
             <TouchableOpacity
-              style={[styles.langButton, i18n.language === 'en' && styles.langButtonActive]}
+              style={[
+                styles.langButton,
+                i18n.language === 'en' && styles.langButtonActive,
+              ]}
               onPress={() => setLanguage('en')}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.langButtonText, i18n.language === 'en' && styles.langButtonTextActive]}>
+              <Text
+                style={[
+                  styles.langText,
+                  i18n.language === 'en' && styles.langTextActive,
+                ]}
+              >
                 English
               </Text>
             </TouchableOpacity>
+
             <TouchableOpacity
-              style={[styles.langButton, i18n.language === 'fr' && styles.langButtonActive]}
+              style={[
+                styles.langButton,
+                i18n.language === 'fr' && styles.langButtonActive,
+              ]}
               onPress={() => setLanguage('fr')}
+              activeOpacity={0.85}
             >
-              <Text style={[styles.langButtonText, i18n.language === 'fr' && styles.langButtonTextActive]}>
+              <Text
+                style={[
+                  styles.langText,
+                  i18n.language === 'fr' && styles.langTextActive,
+                ]}
+              >
                 Français
               </Text>
             </TouchableOpacity>
           </View>
         </View>
-          {user?.country && (
-            <Text style={styles.profileMeta}>{user.country}</Text>
-          )}
-          {user?.age != null && (
-            <Text style={styles.profileMeta}>{user.age} years old</Text>
-          )}
-          <View style={styles.levelBadge}>
-          <Text style={styles.levelText}>{rank} Tier</Text>
-          </View>
-        </View>
 
-        {/* Stats Grid */}
-        <View style={styles.statsGrid}>
-          <View style={styles.statCard}>
-          <Text style={styles.statValue}>{points}</Text>
-            <Text style={styles.statLabel}>Points</Text>
+        {/* Referral Section */}
+        <View style={styles.referralCard}>
+          <View style={styles.referralHeader}>
+            <Ionicons name="gift-outline" size={20} color="#3B82F6" />
+            <Text style={styles.referralTitle}>
+              {t('Your Referral Code')}
+            </Text>
           </View>
-          <View style={styles.statCard}>
-          <Text style={styles.statValue}>{accuracy}%</Text>
-            <Text style={styles.statLabel}>Accuracy</Text>
-          </View>
-          <View style={styles.statCard}>
-          <Text style={styles.statValue}>{totalPredictions}</Text>
-          <Text style={styles.statLabel}>Predictions</Text>
-          </View>
-          <View style={styles.statCard}>
-          <Text style={styles.statValue}>{correctPredictions}</Text>
-          <Text style={styles.statLabel}>Correct Picks</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{referrals}</Text>
-          <Text style={styles.statLabel}>Referrals</Text>
-        </View>
-        <View style={styles.statCard}>
-          <Text style={styles.statValue}>{streak || '—'}</Text>
-          <Text style={styles.statLabel}>Streak</Text>
-          </View>
-        </View>
 
-      {/* Referral */}
-      <View style={styles.referralCard}>
-        <View style={styles.referralHeader}>
-          <Ionicons name="gift-outline" size={22} color="#3B82F6" />
-          <Text style={styles.referralTitle}>Your Referral Code</Text>
-        </View>
-        {referralCode ? (
-          <>
-            <View style={styles.referralCodeContainer}>
-              <Text style={styles.referralCode}>{referralCode}</Text>
+          {referralCode ? (
+            <>
+              <Text style={styles.referralCode}>
+                {referralCode}
+              </Text>
+
               <TouchableOpacity
                 style={styles.copyButton}
-                onPress={() => copyToClipboard(referralCode, 'code')}
+                onPress={() => copyToClipboard(referralCode)}
+                activeOpacity={0.85}
               >
-                <Ionicons name="copy-outline" size={20} color="#3B82F6" />
-                <Text style={styles.copyButtonText}>Copy Code</Text>
-              </TouchableOpacity>
-            </View>
-            <View style={styles.referralLinkContainer}>
-              <Text style={styles.referralLinkLabel}>Referral Link:</Text>
-              <View style={styles.referralLinkRow}>
-                <Text style={styles.referralLink} numberOfLines={1}>
-                  {referralLink}
+                <Ionicons
+                  name="copy-outline"
+                  size={18}
+                  color="#FFF"
+                />
+                <Text style={styles.copyButtonText}>
+                  {t('Copy Code')}
                 </Text>
-                <TouchableOpacity
-                  style={styles.copyIconButton}
-                  onPress={() => copyToClipboard(referralLink, 'link')}
-                >
-                  <Ionicons name="copy-outline" size={18} color="#3B82F6" />
-                </TouchableOpacity>
-              </View>
-            </View>
-          </>
-        ) : (
-          <Text style={styles.noReferralCode}>No referral code available</Text>
-        )}
-        <Text style={styles.referralHint}>
-          Share your referral code or link to earn 50 points when friends join using it!
-        </Text>
-      </View>
-
-        {/* Logout Button */}
-        <TouchableOpacity
-          style={styles.logoutButton}
-          onPress={() => {
-            Alert.alert(
-              'Logout',
-              'Are you sure you want to logout?',
-              [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                  text: 'Logout',
-                  style: 'destructive',
-                  onPress: async () => {
-                    try {
-                      await logout();
-                    } catch (error) {
-                      Alert.alert('Error', 'Failed to logout');
-                    }
-                  },
-                },
-              ]
-            );
-          }}
-        >
-          <Ionicons name="log-out-outline" size={20} color="#EF4444" />
-          <Text style={styles.logoutText}>Logout</Text>
-        </TouchableOpacity>
-
-        {/* Tab Navigation */}
-        <View style={styles.tabContainer}>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'profile' && styles.activeTab]}
-            onPress={() => setActiveTab('profile')}
-          >
-            <Text style={[styles.tabText, activeTab === 'profile' && styles.activeTabText]}>
-              Profile
+              </TouchableOpacity>
+            </>
+          ) : (
+            <Text style={styles.noReferralCode}>
+              {t('No referral code available')}
             </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.tab, activeTab === 'rewards' && styles.activeTab]}
-            onPress={() => setActiveTab('rewards')}
-          >
-            <Text style={[styles.tabText, activeTab === 'rewards' && styles.activeTabText]}>
-              Rewards
-            </Text>
-          </TouchableOpacity>
+          )}
         </View>
 
-        {/* Tab Content */}
-        {activeTab === 'profile' ? (
-          <View style={styles.tabContent}>
-            <Text style={styles.sectionTitle}>Recent Activity</Text>
-            <View style={styles.activityItem}>
-              <View style={styles.activityIcon}>
-                <Ionicons name="time-outline" size={20} color="#9CA3AF" />
-              </View>
-              <View style={styles.activityContent}>
-                <Text style={styles.activityText}>Activity tracking coming soon</Text>
-                <Text style={styles.activityTime}>We’ll show your latest wins here.</Text>
-              </View>
-            </View>
-          </View>
-        ) : (
-          <View style={styles.tabContent}>
-            <Text style={styles.sectionTitle}>Achievements & Rewards</Text>
-            {rewards.map((reward) => (
-              <View key={reward.id} style={styles.rewardCard}>
-                <View style={styles.rewardIcon}>
-                  <Text style={styles.rewardEmoji}>{reward.icon}</Text>
-                </View>
-                <View style={styles.rewardContent}>
-                  <Text style={styles.rewardTitle}>{reward.title}</Text>
-                  <Text style={styles.rewardDescription}>{reward.description}</Text>
-                  <View style={styles.progressContainer}>
-                    <View style={styles.progressBar}>
-                      <View 
-                        style={[
-                          styles.progressFill, 
-                          { width: `${reward.progress}%` }
-                        ]} 
-                      />
-                    </View>
-                    <Text style={styles.progressText}>{reward.progress}%</Text>
-                  </View>
-                </View>
-                <View style={styles.rewardStatus}>
-                  {reward.unlocked ? (
-                    <Ionicons name="checkmark-circle" size={24} color="#10B981" />
-                  ) : (
-                    <Ionicons name="lock-closed" size={24} color="#6B7280" />
-                  )}
-                </View>
-              </View>
-            ))}
-          </View>
-        )}
+        {/* Tabs */}
+        <View style={styles.tabContainer}>
+          {['profile', 'rewards'].map((tab) => (
+            <TouchableOpacity
+              key={tab}
+              style={[
+                styles.tab,
+                activeTab === tab && styles.activeTab,
+              ]}
+              onPress={() => setActiveTab(tab)}
+              activeOpacity={0.9}
+            >
+              <Text
+                style={[
+                  styles.tabText,
+                  activeTab === tab && styles.activeTabText,
+                ]}
+              >
+                {tab === 'profile' ? 'Profile' : 'Rewards'}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Logout */}
+        <TouchableOpacity
+          style={styles.logoutButton}
+          activeOpacity={0.85}
+          onPress={confirmLogout}
+        >
+          <Ionicons
+            name="log-out-outline"
+            size={20}
+            color="#EF4444"
+          />
+          <Text style={styles.logoutText}>Logout</Text>
+        </TouchableOpacity>
       </ScrollView>
     </SafeAreaView>
   );
@@ -328,378 +277,242 @@ export default function ProfileScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#1A202C',
+    backgroundColor: '#0F172A',
   },
+
   header: {
-    flexDirection: 'row',
+    paddingVertical: 20,
     alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#2D3748',
   },
-  backButton: {
-    padding: 5,
-  },
+
   headerTitle: {
-    fontSize: 20,
+    fontSize: 22,
     fontFamily: fonts.heading,
     color: '#FFFFFF',
   },
-  placeholder: {
-    width: 34,
-  },
-  marqueeContainer: {
-    paddingHorizontal: 20,
-    paddingVertical: 10,
-    backgroundColor: '#111827',
-    borderBottomWidth: 1,
-    borderBottomColor: '#2D3748',
-  },
-  marqueeContent: {
-    flexDirection: 'row',
-  },
-  marqueeText: {
-    color: '#9CA3AF',
-    fontSize: 14,
-    fontFamily: fonts.body,
-  },
-  content: {
-    flex: 1,
-    paddingHorizontal: 20,
-  },
+
   profileSection: {
     alignItems: 'center',
     paddingVertical: 30,
   },
-  profileAvatar: {
-    width: 100,
-    height: 100,
-    borderRadius: 50,
+
+  avatarWrapper: {
+    padding: 4,
+    borderRadius: 60,
+    backgroundColor: 'rgba(59,130,246,0.15)',
     marginBottom: 15,
   },
+
+  profileAvatar: {
+    width: 110,
+    height: 110,
+    borderRadius: 55,
+    borderWidth: 3,
+    borderColor: '#3B82F6',
+  },
+
   changePhotoButton: {
     backgroundColor: '#3B82F6',
-    paddingHorizontal: 14,
-    paddingVertical: 8,
-    borderRadius: 10,
-    marginBottom: 12,
+    paddingHorizontal: 18,
+    paddingVertical: 10,
+    borderRadius: 12,
+    marginBottom: 15,
   },
+
   changePhotoText: {
-    color: '#FFFFFF',
-    fontSize: 13,
+    color: '#FFF',
     fontFamily: fonts.bodySemiBold,
   },
+
   profileName: {
     fontSize: 24,
     fontFamily: fonts.heading,
     color: '#FFFFFF',
-    marginBottom: 5,
   },
+
   profileEmail: {
-    fontSize: 16,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-    marginBottom: 4,
-  },
-  profileMeta: {
     fontSize: 14,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-    marginBottom: 4,
+    color: '#94A3B8',
+    marginTop: 6,
   },
+
   levelBadge: {
-    backgroundColor: '#3B82F6',
-    paddingHorizontal: 20,
-    paddingVertical: 8,
+    backgroundColor: '#1E3A8A',
+    paddingHorizontal: 16,
+    paddingVertical: 6,
     borderRadius: 20,
+    marginTop: 10,
   },
+
   levelText: {
-    fontSize: 16,
+    color: '#FFF',
+    fontSize: 13,
     fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
   },
+
   statsGrid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
-    marginBottom: 30,
+    justifyContent: 'space-between',
+    paddingHorizontal: 20,
   },
+
   statCard: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 20,
-    alignItems: 'center',
+    backgroundColor: '#1E293B',
     width: '48%',
-    marginBottom: 10,
-    marginRight: '2%',
-  },
-  statValue: {
-    fontSize: 24,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginBottom: 5,
-  },
-  statLabel: {
-    fontSize: 14,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-  },
-  tabContainer: {
-    flexDirection: 'row',
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    marginBottom: 20,
-    padding: 4,
-  },
-  tab: {
-    flex: 1,
-    paddingVertical: 12,
+    borderRadius: 18,
+    paddingVertical: 22,
     alignItems: 'center',
-    borderRadius: 8,
-  },
-  activeTab: {
-    backgroundColor: '#3B82F6',
-  },
-  tabText: {
-    fontSize: 16,
-    fontFamily: fonts.bodyMedium,
-    color: '#9CA3AF',
-  },
-  activeTabText: {
-    color: '#FFFFFF',
-  },
-  tabContent: {
-    marginBottom: 30,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontFamily: fonts.heading,
-    color: '#FFFFFF',
     marginBottom: 15,
   },
-  sectionCard: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 16,
+
+  statValue: {
+    fontSize: 22,
+    color: '#FFF',
+    fontFamily: fonts.bodySemiBold,
   },
+
+  statLabel: {
+    fontSize: 13,
+    color: '#94A3B8',
+    marginTop: 6,
+  },
+
+  sectionCard: {
+    marginHorizontal: 20,
+    backgroundColor: '#1E293B',
+    borderRadius: 20,
+    padding: 20,
+    marginBottom: 20,
+  },
+
+  sectionTitle: {
+    fontSize: 16,
+    fontFamily: fonts.bodySemiBold,
+    color: '#FFF',
+    marginBottom: 15,
+  },
+
   langRow: {
     flexDirection: 'row',
-    gap: 10,
+    justifyContent: 'space-between',
   },
+
   langButton: {
     flex: 1,
-    paddingVertical: 12,
-    borderRadius: 10,
-    backgroundColor: '#1F2937',
-    borderWidth: 1,
-    borderColor: '#374151',
+    paddingVertical: 14,
+    borderRadius: 14,
+    backgroundColor: '#111827',
     alignItems: 'center',
+    marginHorizontal: 5,
   },
+
   langButtonActive: {
-    backgroundColor: '#2563EB',
-    borderColor: '#60A5FA',
-  },
-  langButtonText: {
-    fontSize: 14,
-    fontFamily: fonts.bodyMedium,
-    color: '#E5E7EB',
-  },
-  langButtonTextActive: {
-    color: '#FFFFFF',
-    fontFamily: fonts.bodySemiBold,
-  },
-  activityItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-  },
-  activityIcon: {
-    marginRight: 15,
-  },
-  activityContent: {
-    flex: 1,
-  },
-  activityText: {
-    fontSize: 16,
-    fontFamily: fonts.bodyMedium,
-    color: '#FFFFFF',
-    marginBottom: 5,
-  },
-  activityTime: {
-    fontSize: 14,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-  },
-  activityPoints: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#10B981',
-  },
-  rewardCard: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 15,
-    marginBottom: 10,
-  },
-  rewardIcon: {
-    width: 50,
-    height: 50,
-    borderRadius: 25,
-    backgroundColor: '#374151',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 15,
-  },
-  rewardEmoji: {
-    fontSize: 24,
-  },
-  rewardContent: {
-    flex: 1,
-  },
-  rewardTitle: {
-    fontSize: 16,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-    marginBottom: 5,
-  },
-  rewardDescription: {
-    fontSize: 14,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-    marginBottom: 10,
-  },
-  progressContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  progressBar: {
-    flex: 1,
-    height: 6,
-    backgroundColor: '#374151',
-    borderRadius: 3,
-    marginRight: 10,
-  },
-  progressFill: {
-    height: '100%',
     backgroundColor: '#3B82F6',
-    borderRadius: 3,
   },
-  progressText: {
-    fontSize: 12,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
+
+  langText: {
+    color: '#94A3B8',
+    fontFamily: fonts.bodyMedium,
   },
-  rewardStatus: {
-    marginLeft: 10,
+
+  langTextActive: {
+    color: '#FFF',
   },
+
   referralCard: {
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 20,
+    margin: 20,
+    padding: 20,
+    borderRadius: 20,
+    backgroundColor: '#1E293B',
     borderWidth: 1,
-    borderColor: '#3B82F6',
+    borderColor: 'rgba(59,130,246,0.4)',
   },
+
   referralHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     marginBottom: 12,
   },
+
   referralTitle: {
     marginLeft: 8,
-    fontSize: 16,
+    color: '#FFF',
     fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
   },
-  referralCodeContainer: {
-    marginBottom: 12,
-  },
+
   referralCode: {
-    fontSize: 24,
-    fontFamily: fonts.heading,
-    color: '#3B82F6',
-    letterSpacing: 2,
-    marginBottom: 10,
+    fontSize: 28,
+    color: '#60A5FA',
     textAlign: 'center',
+    letterSpacing: 4,
+    marginBottom: 15,
   },
+
   copyButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
     backgroundColor: '#3B82F6',
-    borderRadius: 8,
-    paddingVertical: 10,
-    paddingHorizontal: 16,
-    gap: 6,
-  },
-  copyButtonText: {
-    fontSize: 14,
-    fontFamily: fonts.bodySemiBold,
-    color: '#FFFFFF',
-  },
-  referralLinkContainer: {
-    marginBottom: 12,
-  },
-  referralLinkLabel: {
-    fontSize: 12,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-    marginBottom: 6,
-  },
-  referralLinkRow: {
-    flexDirection: 'row',
+    paddingVertical: 12,
+    borderRadius: 12,
     alignItems: 'center',
-    backgroundColor: '#1A202C',
-    borderRadius: 8,
-    padding: 10,
+    flexDirection: 'row',
+    justifyContent: 'center',
     gap: 8,
   },
-  referralLink: {
-    flex: 1,
-    fontSize: 12,
-    fontFamily: fonts.body,
-    color: '#E9EDEF',
+
+  copyButtonText: {
+    color: '#FFF',
+    fontFamily: fonts.bodySemiBold,
   },
-  copyIconButton: {
-    padding: 4,
-  },
+
   noReferralCode: {
-    fontSize: 14,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
+    color: '#94A3B8',
     textAlign: 'center',
-    paddingVertical: 20,
   },
-  referralHint: {
-    fontSize: 12,
-    fontFamily: fonts.body,
-    color: '#9CA3AF',
-    marginTop: 4,
-    lineHeight: 16,
-  },
-  logoutButton: {
+
+  tabContainer: {
     flexDirection: 'row',
+    marginHorizontal: 20,
+    backgroundColor: '#111827',
+    borderRadius: 30,
+    padding: 6,
+    marginBottom: 20,
+  },
+
+  tab: {
+    flex: 1,
+    paddingVertical: 14,
     alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#2D3748',
-    borderRadius: 12,
-    padding: 16,
-    marginTop: 20,
-    marginBottom: 30,
+    borderRadius: 25,
+  },
+
+  activeTab: {
+    backgroundColor: '#3B82F6',
+  },
+
+  tabText: {
+    color: '#94A3B8',
+    fontFamily: fonts.bodyMedium,
+  },
+
+  activeTabText: {
+    color: '#FFF',
+  },
+
+  logoutButton: {
+    marginHorizontal: 20,
+    marginBottom: 40,
+    paddingVertical: 18,
+    borderRadius: 18,
     borderWidth: 1,
     borderColor: '#EF4444',
+    alignItems: 'center',
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 10,
   },
+
   logoutText: {
     color: '#EF4444',
-    fontSize: 16,
     fontFamily: fonts.bodySemiBold,
-    marginLeft: 10,
   },
 });

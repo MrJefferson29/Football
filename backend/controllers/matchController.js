@@ -1,5 +1,6 @@
 const Match = require('../models/Match');
 const MatchBetPool = require('../models/MatchBetPool');
+const BetPayment = require('../models/BetPayment');
 
 // @desc    Get all matches
 // @route   GET /api/matches
@@ -657,6 +658,23 @@ exports.joinMatchPool = async (req, res) => {
       });
     }
 
+    // Ensure the user has a completed Tranzak payment for this bet
+    const paidBet = await BetPayment.findOne({
+      user: req.user.id,
+      match: id,
+      amount: numericAmount,
+      prediction,
+      status: 'completed',
+      usedForPool: false,
+    }).sort({ createdAt: -1 });
+
+    if (!paidBet) {
+      return res.status(400).json({
+        success: false,
+        message: 'You must complete payment for this stake before joining a pool.',
+      });
+    }
+
     // Avoid duplicate participation in the same match/amount with the same prediction
     const existingParticipation = await MatchBetPool.findOne({
       match: id,
@@ -758,6 +776,12 @@ exports.joinMatchPool = async (req, res) => {
     }
 
     await pool.save();
+
+    // Mark the payment record as used for this pool
+    await BetPayment.findByIdAndUpdate(paidBet._id, {
+      usedForPool: true,
+      pool: pool._id,
+    });
 
     const populatedPool = await MatchBetPool.findById(pool._id).populate(
       'participants.user',

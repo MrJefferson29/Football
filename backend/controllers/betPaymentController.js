@@ -84,6 +84,7 @@ exports.processBetPayment = async (req, res) => {
         amount,
         prediction,
         stakeLabel,
+        mobileWalletNumber,
         status: 'initiated',
         description,
       });

@@ -321,31 +321,7 @@ export default function MatchesScreen() {
             <Text style={styles.loadingText}>{t('Loading leagues...')}</Text>
           </View>
         ) : (
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>{t('Active Leagues')}</Text>
-            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.leaguesScroll}>
-              {leagues.map((leagueName) => {
-                const config = leagueConfig[leagueName] || { logo: '⚽', color: '#3B82F6', fullName: leagueName };
-                return (
-                  <TouchableOpacity 
-                    key={leagueName} 
-                    style={[
-                      styles.leagueCard, 
-                      { backgroundColor: config.color },
-                      selectedLeague === leagueName && styles.selectedLeague
-                    ]}
-                    onPress={() => setSelectedLeague(leagueName)}
-                  >
-                    <Text style={styles.leagueLogo}>{config.logo}</Text>
-                    <Text style={styles.leagueName}>{leagueName}</Text>
-                    {selectedLeague === leagueName && (
-                      <Text style={styles.selectedIndicator}>✓</Text>
-                    )}
-                  </TouchableOpacity>
-                );
-              })}
-            </ScrollView>
-          </View>
+          <> </>
         )}
 
         {/* Betting Company Selection */}

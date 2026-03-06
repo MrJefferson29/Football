@@ -59,6 +59,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
     const [pools, setPools] = useState<any[]>([]);
     const [poolsLoading, setPoolsLoading] = useState(false);
   const [selectedPoolId, setSelectedPoolId] = useState<string | null>(null);
+    const [mobileWalletNumber, setMobileWalletNumber] = useState('');
 
     useEffect(() => {
         const h = homeScore ? parseInt(homeScore, 10) : null;
@@ -81,6 +82,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
             setSelectedRange(null);
             setPools([]);
             setSelectedPoolId(null);
+            setMobileWalletNumber('');
         }
     }, [visible]);
 
@@ -211,6 +213,18 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                             )}
                         </View>
 
+                        {/* Mobile Money Number */}
+                        <Text style={styles.sectionTitle}>Mobile Money Number</Text>
+                        <TextInput
+                          style={styles.mobileInput}
+                          placeholder="Enter your mobile money number"
+                          placeholderTextColor="#4A5568"
+                          keyboardType="phone-pad"
+                          value={mobileWalletNumber}
+                          onChangeText={setMobileWalletNumber}
+                          maxLength={15}
+                        />
+
                         {/* Stake Selection */}
                         <Text style={styles.sectionTitle}>Select Stake Range</Text>
                         <View style={styles.stakeGrid}>
@@ -218,6 +232,14 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                             <TouchableOpacity
                               key={range.amount}
                               onPress={async () => {
+                                if (!mobileWalletNumber.trim()) {
+                                  Alert.alert(
+                                    'Missing number',
+                                    'Please enter your mobile money number before choosing a stake.'
+                                  );
+                                  return;
+                                }
+
                                 setSelectedRange(range);
                                 // Trigger Tranzak payment for this stake
                                 try {
@@ -226,6 +248,7 @@ export default function VotingModal({ visible, onClose, match, onVote }: VotingM
                                     amount: range.amount,
                                     matchId,
                                     prediction: autoSelectedPrediction || 'home',
+                                    mobileWalletNumber: mobileWalletNumber.trim(),
                                     stakeLabel: range.label,
                                   });
 
@@ -400,6 +423,17 @@ const styles = StyleSheet.create({
     predictionBadge: { paddingHorizontal: 12, paddingVertical: 4, borderRadius: 8 },
     predictionBadgeText: { color: '#FFF', fontSize: 10, fontWeight: '900', letterSpacing: 0.5 },
     sectionTitle: { color: '#6B7280', fontSize: 12, fontWeight: '800', textTransform: 'uppercase', marginBottom: 16, marginTop: 10 },
+    mobileInput: {
+        backgroundColor: '#111827',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: '#374151',
+        paddingHorizontal: 14,
+        paddingVertical: 12,
+        color: '#F9FAFB',
+        fontSize: 14,
+        marginBottom: 10,
+    },
     stakeGrid: { flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'space-between' },
     stakeChip: { 
         width: '31%', 

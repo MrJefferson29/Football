@@ -261,6 +261,7 @@ export const betPaymentsAPI = {
     amount: number;
     matchId: string;
     prediction: 'home' | 'draw' | 'away';
+    mobileWalletNumber: string;
     stakeLabel?: string;
     description?: string;
   }) => {

@@ -8,12 +8,15 @@ const BetPaymentSchema = new mongoose.Schema({
   amount: { type: Number, required: true },
   prediction: { type: String, enum: ['home', 'draw', 'away'], required: true },
   stakeLabel: { type: String },
+  mobileWalletNumber: { type: String },
   status: {
     type: String,
     enum: ['initiated', 'completed', 'failed'],
     default: 'initiated',
   },
   description: { type: String, required: true },
+  pool: { type: mongoose.Schema.Types.ObjectId, ref: 'MatchBetPool', default: null },
+  usedForPool: { type: Boolean, default: false },
   createdAt: { type: Date, default: Date.now },
 });
 

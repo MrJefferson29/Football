@@ -1113,8 +1113,8 @@ const styles = StyleSheet.create({
     marginTop: 4,
   },
   teamLogo: {
-    width: 28,
-    height: 28,
+    width: 38,
+    height: 38,
     borderRadius: 14,
     marginBottom: 4,
   },
@@ -1159,8 +1159,8 @@ const styles = StyleSheet.create({
     color: "#FFFFFF",
   },
   matchTeamLogo: {
-    width: 20,
-    height: 20,
+    width: 30,
+    height: 30,
     borderRadius: 10,
     marginRight: 8,
   },
