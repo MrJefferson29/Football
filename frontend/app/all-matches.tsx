@@ -8,9 +8,53 @@ import { matchesAPI } from '@/utils/api';
 import { getDirectImageUrl } from '@/utils/imageUtils';
 import { fonts } from '@/utils/typography';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
+
+// Match start date+time in local time
+function getMatchStartDate(match: any): Date | null {
+  if (!match?.matchDate || !match?.matchTime) return null;
+  try {
+    let d: Date;
+    if (match.matchDate instanceof Date) {
+      d = new Date(match.matchDate.getTime());
+    } else if (typeof match.matchDate === 'string') {
+      const dateStr = match.matchDate.split('T')[0];
+      const [y, m, day] = dateStr.split('-').map(Number);
+      d = new Date(y, m - 1, day);
+    } else {
+      d = new Date(match.matchDate);
+    }
+    const timeStr = String(match.matchTime).trim();
+    const pm = /(\d{1,2}):(\d{2})\s*PM$/i.test(timeStr);
+    const am = /(\d{1,2}):(\d{2})\s*AM$/i.test(timeStr);
+    let hours = 0, minutes = 0;
+    if (pm || am) {
+      const parts = timeStr.match(/(\d{1,2}):(\d{2})/i);
+      if (parts) {
+        hours = parseInt(parts[1], 10);
+        minutes = parseInt(parts[2], 10);
+        if (pm && hours !== 12) hours += 12;
+        if (am && hours === 12) hours = 0;
+      }
+    } else {
+      const parts = timeStr.split(':');
+      hours = parseInt(parts[0], 10) || 0;
+      minutes = parseInt(parts[1], 10) || 0;
+    }
+    d.setHours(hours, minutes, 0, 0);
+    return d;
+  } catch {
+    return null;
+  }
+}
+function isMatchStarted(match: any): boolean {
+  const start = getMatchStartDate(match);
+  return start ? new Date() >= start : false;
+}
 
 export default function AllMatchesScreen() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [loading, setLoading] = useState(true);
   const [showVotingModal, setShowVotingModal] = useState(false);
@@ -19,64 +63,51 @@ export default function AllMatchesScreen() {
   const [upcomingMatches, setUpcomingMatches] = useState<any[]>([]);
   const [previousMatches, setPreviousMatches] = useState<any[]>([]);
   const [selectedTab, setSelectedTab] = useState<'upcoming' | 'previous'>('upcoming');
+  const [myPoolMatchIds, setMyPoolMatchIds] = useState<Set<string>>(new Set());
 
   useEffect(() => {
     fetchMatches();
   }, []);
 
-  // Helper to get a Date object from match.matchDate (local date)
-  const getMatchDate = (match: any): Date | null => {
-    if (!match.matchDate) {
-      return null;
+  useEffect(() => {
+    if (!user) {
+      setMyPoolMatchIds(new Set());
+      return;
     }
-
-    try {
-      let matchDateObj: Date;
-      if (match.matchDate instanceof Date) {
-        matchDateObj = new Date(match.matchDate.getTime());
-      } else if (typeof match.matchDate === 'string') {
-        // Extract just the date part (YYYY-MM-DD) and create a local date
-        const dateStr = match.matchDate.split('T')[0];
-        const [year, month, day] = dateStr.split('-').map(Number);
-        matchDateObj = new Date(year, month - 1, day);
-      } else {
-        matchDateObj = new Date(match.matchDate);
-      }
-      return matchDateObj;
-    } catch (error) {
-      console.error('Error checking match date:', error);
-      return null;
-    }
-  };
+    matchesAPI.getMyPools()
+      .then((res) => {
+        if (!res?.success || !res?.data) return;
+        const ids = new Set<string>();
+        const pools = [...(res.data.active || []), ...(res.data.past || [])];
+        pools.forEach((p: any) => {
+          const mid = p?.match?._id || p?.match?.id || p?.match;
+          if (mid) ids.add(String(mid));
+        });
+        setMyPoolMatchIds(ids);
+      })
+      .catch(() => setMyPoolMatchIds(new Set()));
+  }, [user]);
 
   // Helper function to check if a match is finished
   const isMatchFinished = (match: any): boolean => {
-    return match.status === 'finished' || 
-           (match.homeScore !== null && match.homeScore !== undefined && 
+    return match.status === 'finished' ||
+           (match.homeScore !== null && match.homeScore !== undefined &&
             match.awayScore !== null && match.awayScore !== undefined);
   };
 
-  // Split matches into upcoming and previous
+  // Split matches: upcoming = not started and not finished; previous = started or finished
   const splitMatches = (matches: any[]) => {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-
     const upcoming: any[] = [];
     const previous: any[] = [];
-
     matches.forEach((match) => {
-      const date = getMatchDate(match);
+      const started = isMatchStarted(match);
       const finished = isMatchFinished(match);
-
-      if (date && date < today) {
-        previous.push(match);
-      } else if (finished) {
+      if (started || finished) {
         previous.push(match);
       } else {
         upcoming.push(match);
       }
     });
-
     setUpcomingMatches(upcoming);
     setPreviousMatches(previous);
   };
@@ -99,6 +130,7 @@ export default function AllMatchesScreen() {
   };
 
   const handleMatchVote = async (matchId: string) => {
+    if (myPoolMatchIds.has(matchId)) return;
     const match = allMatches.find((m: any) => m._id === matchId || m.id === matchId);
     if (match) {
       setSelectedMatch({
@@ -133,6 +165,7 @@ export default function AllMatchesScreen() {
         poolId,
       });
       if (response.success) {
+        setMyPoolMatchIds((prev) => new Set(prev).add(matchId));
         Alert.alert(t('Bet Placed!'), t('Your bet has been placed in a pool.'));
         setShowVotingModal(false);
         setSelectedMatch(null);
@@ -210,18 +243,22 @@ export default function AllMatchesScreen() {
           ).length > 0 ? (
             (selectedTab === 'upcoming' ? upcomingMatches : previousMatches).map((match: any) => {
               const isFinished = isMatchFinished(match);
-              const hasScore = match.homeScore !== null && match.homeScore !== undefined && 
+              const hasBet = myPoolMatchIds.has(match._id || match.id);
+              const canVote = !isFinished && !hasBet;
+              const hasScore = match.homeScore !== null && match.homeScore !== undefined &&
                               match.awayScore !== null && match.awayScore !== undefined;
-              
+
               return (
-                <TouchableOpacity 
-                  key={match._id || match.id} 
+                <TouchableOpacity
+                  key={match._id || match.id}
                   style={[
                     styles.matchCard,
-                    isFinished && styles.matchCardFinished
+                    isFinished && styles.matchCardFinished,
+                    hasBet && !isFinished && styles.matchCardBetPlaced
                   ]}
-                  onPress={() => !isFinished && handleMatchVote(match._id || match.id)}
-                  disabled={isFinished}
+                  onPress={() => canVote && handleMatchVote(match._id || match.id)}
+                  disabled={!canVote}
+                  activeOpacity={canVote ? 0.7 : 1}
                 >
                   <View style={styles.matchHeader}>
                     <Text style={styles.leagueName}>{match.league || 'Other'}</Text>
@@ -235,11 +272,11 @@ export default function AllMatchesScreen() {
                       )}
                     </View>
                   </View>
-                  
+
                   <View style={styles.matchTeams}>
                     <View style={styles.teamContainer}>
-                      <Image 
-                        source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }} 
+                      <Image
+                        source={{ uri: getDirectImageUrl(match.homeLogo) || 'https://via.placeholder.com/40' }}
                         style={styles.teamLogo}
                         onError={(e) => {
                           console.log('Image load error:', match.homeLogo);
@@ -247,7 +284,7 @@ export default function AllMatchesScreen() {
                       />
                       <Text style={styles.teamName}>{match.homeTeam}</Text>
                     </View>
-                    
+
                     <View style={styles.vsContainer}>
                       {hasScore ? (
                         <Text style={styles.scoreText}>
@@ -256,15 +293,19 @@ export default function AllMatchesScreen() {
                       ) : (
                         <>
                           <Text style={styles.vsText}>VS</Text>
-                          {!isFinished && <Text style={styles.voteText}>{t('Tap to vote')}</Text>}
+                          {hasBet ? (
+                            <Text style={styles.betPlacedText}>{t('Bet placed')}</Text>
+                          ) : !isFinished ? (
+                            <Text style={styles.voteText}>{t('Tap to vote')}</Text>
+                          ) : null}
                         </>
                       )}
                     </View>
-                    
+
                     <View style={styles.teamContainer}>
                       <Text style={styles.teamName}>{match.awayTeam}</Text>
-                      <Image 
-                        source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }} 
+                      <Image
+                        source={{ uri: getDirectImageUrl(match.awayLogo) || 'https://via.placeholder.com/40' }}
                         style={styles.teamLogo}
                         onError={(e) => {
                           console.log('Image load error:', match.awayLogo);
@@ -341,6 +382,15 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: '#4A2E2E',
     opacity: 0.8,
+  },
+  matchCardBetPlaced: {
+    opacity: 0.9,
+  },
+  betPlacedText: {
+    fontSize: 10,
+    color: '#10B981',
+    marginTop: 2,
+    fontFamily: fonts.bodyMedium,
   },
   matchHeader: {
     flexDirection: 'row',

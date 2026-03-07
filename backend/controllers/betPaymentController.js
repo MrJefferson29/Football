@@ -2,9 +2,12 @@ const tranzak = require('tranzak-node').default;
 const shortUUID = require('short-uuid');
 const BetPayment = require('../models/BetPayment');
 const User = require('../models/User');
+const MatchBetPool = require('../models/MatchBetPool');
 const { doJoinMatchPool } = require('./matchController');
 
 require('dotenv').config();
+
+const PAYOUT_RATE = 0.95; // 95% of pool to winner(s), or 95% refund to each if no winner
 
 const client = new tranzak({
   appId: process.env.TRANZAK_APP_ID,
@@ -308,5 +311,112 @@ exports.getBetPayments = async (req, res) => {
     console.error('Error fetching bet payments:', error);
     return res.status(500).json({ success: false, error: 'Internal server error.' });
   }
+};
+
+// @desc    Settle all bet pools for a match when final score is set.
+//          Winner gets 95% of total pool; if no winner, each participant gets 95% of their stake back.
+// @param   {string} matchId - Match _id
+// @param   {number} homeScore - Final home score
+// @param   {number} awayScore - Final away score
+// @returns {Promise<{ settled: number, errors: string[] }>}
+exports.settleMatchBetPools = async (matchId, homeScore, awayScore) => {
+  const errors = [];
+  let settledCount = 0;
+
+  const correctPrediction =
+    homeScore > awayScore ? 'home' : homeScore < awayScore ? 'away' : 'draw';
+
+  const pools = await MatchBetPool.find({
+    match: matchId,
+    settled: false,
+  });
+
+  for (const pool of pools) {
+    try {
+      const participants = pool.participants || [];
+      if (participants.length === 0) {
+        await MatchBetPool.findByIdAndUpdate(pool._id, {
+          settled: true,
+          settlementAt: new Date(),
+        });
+        settledCount++;
+        continue;
+      }
+
+      const totalPot = pool.amount * participants.length;
+      const payoutAmount = Math.floor(totalPot * PAYOUT_RATE);
+      const refundPerPerson = Math.floor(pool.amount * PAYOUT_RATE);
+
+      const winners = participants.filter((p) => p.prediction === correctPrediction);
+
+      if (winners.length > 0) {
+        // One or more winners: pay 95% of total pool to the first winner (or split if multiple)
+        const amountPerWinner = Math.floor(payoutAmount / winners.length);
+        for (const w of winners) {
+          const payRecord = await BetPayment.findOne({
+            user: w.user,
+            match: matchId,
+            pool: pool._id,
+            status: 'completed',
+          });
+          if (payRecord && payRecord.mobileWalletNumber && amountPerWinner > 0) {
+            try {
+              await client.payment.transfer.simple.toMobileMoney({
+                payeeAccountId: payRecord.mobileWalletNumber,
+                amount: amountPerWinner,
+                currencyCode: 'XAF',
+                customTransactionRef: shortUUID.generate(),
+                description: 'Bet pool winnings',
+                payeeNote: 'Bet pool winnings',
+              });
+            } catch (transferErr) {
+              console.error('Tranzak payout failed for winner:', w.user, transferErr);
+              errors.push(`Winner payout failed: ${w.user} - ${transferErr.message}`);
+            }
+          }
+        }
+        await MatchBetPool.findByIdAndUpdate(pool._id, {
+          settled: true,
+          winner: winners[0].user,
+          settlementAt: new Date(),
+        });
+      } else {
+        // No winner: refund each participant 95% of their stake
+        for (const p of participants) {
+          const payRecord = await BetPayment.findOne({
+            user: p.user,
+            match: matchId,
+            pool: pool._id,
+            status: 'completed',
+          });
+          if (payRecord && payRecord.mobileWalletNumber && refundPerPerson > 0) {
+            try {
+              await client.payment.transfer.simple.toMobileMoney({
+                payeeAccountId: payRecord.mobileWalletNumber,
+                amount: refundPerPerson,
+                currencyCode: 'XAF',
+                customTransactionRef: shortUUID.generate(),
+                description: 'Bet pool refund (no correct prediction)',
+                payeeNote: 'Bet pool refund',
+              });
+            } catch (transferErr) {
+              console.error('Tranzak refund failed for participant:', p.user, transferErr);
+              errors.push(`Refund failed: ${p.user} - ${transferErr.message}`);
+            }
+          }
+        }
+        await MatchBetPool.findByIdAndUpdate(pool._id, {
+          settled: true,
+          settlementAt: new Date(),
+        });
+      }
+      settledCount++;
+    } catch (err) {
+      console.error('Error settling pool:', pool._id, err);
+      errors.push(`Pool ${pool._id}: ${err.message}`);
+    }
+  }
+
+  return { settled: settledCount, errors };
 };
 

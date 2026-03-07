@@ -1,5 +1,5 @@
 import VotingModal from '@/components/VotingModal';
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useMemo } from 'react';
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { matchesAPI } from '@/utils/api';
@@ -9,9 +9,57 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { router } from 'expo-router';
 import { useDataCache } from '@/contexts/DataCacheContext';
 import { useTranslation } from 'react-i18next';
+import { useAuth } from '@/contexts/AuthContext';
+
+// Match start date+time in local time
+function getMatchStartDate(match: any): Date | null {
+  if (!match?.matchDate || !match?.matchTime) return null;
+  try {
+    let d: Date;
+    if (match.matchDate instanceof Date) {
+      d = new Date(match.matchDate.getTime());
+    } else if (typeof match.matchDate === 'string') {
+      const dateStr = match.matchDate.split('T')[0];
+      const [y, m, day] = dateStr.split('-').map(Number);
+      d = new Date(y, m - 1, day);
+    } else {
+      d = new Date(match.matchDate);
+    }
+    const timeStr = String(match.matchTime).trim();
+    const pm = /(\d{1,2}):(\d{2})\s*PM$/i.test(timeStr);
+    const am = /(\d{1,2}):(\d{2})\s*AM$/i.test(timeStr);
+    let hours = 0, minutes = 0;
+    if (pm || am) {
+      const parts = timeStr.match(/(\d{1,2}):(\d{2})/i);
+      if (parts) {
+        hours = parseInt(parts[1], 10);
+        minutes = parseInt(parts[2], 10);
+        if (pm && hours !== 12) hours += 12;
+        if (am && hours === 12) hours = 0;
+      }
+    } else {
+      const parts = timeStr.split(':');
+      hours = parseInt(parts[0], 10) || 0;
+      minutes = parseInt(parts[1], 10) || 0;
+    }
+    d.setHours(hours, minutes, 0, 0);
+    return d;
+  } catch {
+    return null;
+  }
+}
+function isMatchStarted(match: any): boolean {
+  const start = getMatchStartDate(match);
+  return start ? new Date() >= start : false;
+}
+function isMatchFinished(match: any): boolean {
+  return match.status === 'finished' ||
+    (match.homeScore != null && match.awayScore != null);
+}
 
 export default function MatchesScreen() {
   const { t } = useTranslation();
+  const { user } = useAuth();
   const { getCacheData, setCacheData, isCached } = useDataCache();
   const [selectedLeague, setSelectedLeague] = useState<string>('');
   const [isLoading, setIsLoading] = useState(false);
@@ -22,6 +70,8 @@ export default function MatchesScreen() {
   const [selectedMatch, setSelectedMatch] = useState<any>(null);
   const [matches, setMatches] = useState<any[]>([]);
   const [leagues, setLeagues] = useState<string[]>([]);
+  const [selectedTab, setSelectedTab] = useState<'upcoming' | 'previous'>('upcoming');
+  const [myPoolMatchIds, setMyPoolMatchIds] = useState<Set<string>>(new Set());
 
   const bettingCompanies = [
     { id: '1xbet', name: '1xBet', color: '#00A651' },
@@ -132,6 +182,35 @@ export default function MatchesScreen() {
       loadMatches();
     }
   }, [selectedLeague]);
+
+  useEffect(() => {
+    if (!user) {
+      setMyPoolMatchIds(new Set());
+      return;
+    }
+    matchesAPI.getMyPools()
+      .then((res) => {
+        if (!res?.success || !res?.data) return;
+        const ids = new Set<string>();
+        const pools = [...(res.data.active || []), ...(res.data.past || [])];
+        pools.forEach((p: any) => {
+          const mid = p?.match?._id || p?.match?.id || p?.match;
+          if (mid) ids.add(String(mid));
+        });
+        setMyPoolMatchIds(ids);
+      })
+      .catch(() => setMyPoolMatchIds(new Set()));
+  }, [user]);
+
+  const { upcomingMatches, previousMatches } = useMemo(() => {
+    const upcoming: any[] = [];
+    const previous: any[] = [];
+    matches.forEach((m) => {
+      if (isMatchStarted(m) || isMatchFinished(m)) previous.push(m);
+      else upcoming.push(m);
+    });
+    return { upcomingMatches: upcoming, previousMatches: previous };
+  }, [matches]);
 
   // Check if match is more than a week old
   const isMatchOlderThanWeek = (match: any): boolean => {
@@ -257,39 +336,54 @@ export default function MatchesScreen() {
   const fetchMatches = loadMatches;
   const fetchMatchesByLeague = loadMatchesByLeague;
 
-  const filteredFixtures = matches;
+  const filteredFixtures = selectedTab === 'upcoming' ? upcomingMatches : previousMatches;
 
   const handleMatchPress = (fixture: any) => {
-    // Don't open modal if voting is disabled
-    if (isVotingDisabled(fixture)) {
-      return;
-    }
-
+    if (isVotingDisabled(fixture)) return;
+    if (myPoolMatchIds.has(fixture._id || fixture.id)) return;
     setSelectedMatch({
       ...fixture,
       id: fixture._id || fixture.id,
+      _id: fixture._id || fixture.id,
       time: formatTime24Hour(fixture.matchTime),
-      league: fixture.league || 'Other'
+      league: fixture.league || 'Other',
+      homeTeam: fixture.homeTeam,
+      awayTeam: fixture.awayTeam,
+      homeLogo: fixture.homeLogo,
+      awayLogo: fixture.awayLogo,
     });
     setShowVotingModal(true);
   };
 
-  const handleVote = async (matchId: string, prediction: 'home' | 'draw' | 'away') => {
+  const handleVote = async (
+    matchId: string,
+    prediction: 'home' | 'draw' | 'away',
+    homeScore: number,
+    awayScore: number,
+    amount: number,
+    poolId?: string
+  ) => {
     try {
       setIsLoading(true);
-      const response = await matchesAPI.voteMatch(matchId, prediction);
+      const response = await matchesAPI.joinMatchPool(matchId, {
+        amount,
+        prediction,
+        homeScore,
+        awayScore,
+        poolId,
+      });
       if (response.success) {
-        Alert.alert('Success', 'Your vote has been recorded!');
+        Alert.alert(t('Success'), t('Your bet has been placed in a pool!'));
         setShowVotingModal(false);
         setSelectedMatch(null);
-        if (selectedLeague) {
-          await fetchMatchesByLeague();
-        } else {
-          await fetchMatches();
-        }
+        if (selectedLeague) await fetchMatchesByLeague();
+        else await fetchMatches();
+        setMyPoolMatchIds((prev) => new Set(prev).add(matchId));
+      } else {
+        Alert.alert(t('Error'), response.message || t('Failed to place bet'));
       }
     } catch (error: any) {
-      Alert.alert('Error', error.message || 'Failed to vote');
+      Alert.alert(t('Error'), error.message || t('Failed to place bet'));
     } finally {
       setIsLoading(false);
     }
@@ -355,14 +449,25 @@ export default function MatchesScreen() {
             <Text style={styles.sectionTitle}>
               {selectedLeague ? (leagueConfig[selectedLeague]?.fullName || selectedLeague) : t('All')} - {t('Fixtures & Results')}
             </Text>
-            {/* <TouchableOpacity 
-              style={styles.oddsToggle}
-              onPress={() => setShowOdds(!showOdds)}
+          </View>
+          {/* Upcoming / Previous tabs */}
+          <View style={styles.tabsRow}>
+            <TouchableOpacity
+              style={[styles.tabButton, selectedTab === 'upcoming' && styles.tabButtonActive]}
+              onPress={() => setSelectedTab('upcoming')}
             >
-              <Text style={styles.oddsToggleText}>
-                {showOdds ? 'Hide Odds' : 'Show Odds'}
+              <Text style={[styles.tabText, selectedTab === 'upcoming' && styles.tabTextActive]}>
+                {t('Upcoming')}
               </Text>
-            </TouchableOpacity> */}
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.tabButton, selectedTab === 'previous' && styles.tabButtonActive]}
+              onPress={() => setSelectedTab('previous')}
+            >
+              <Text style={[styles.tabText, selectedTab === 'previous' && styles.tabTextActive]}>
+                {t('Previous')}
+              </Text>
+            </TouchableOpacity>
           </View>
           {loading ? (
             <View style={styles.loadingContainer}>
@@ -373,60 +478,71 @@ export default function MatchesScreen() {
             filteredFixtures.map((fixture: any) => {
               const hasScore = fixture.homeScore !== null && fixture.awayScore !== null;
               const votingDisabled = isVotingDisabled(fixture);
+              const hasBet = myPoolMatchIds.has(fixture._id || fixture.id);
+              const isFinished = isMatchFinished(fixture);
+              const canVote = selectedTab === 'upcoming' && !votingDisabled && !hasBet;
               return (
                 <View
                   key={fixture._id || fixture.id}
                   style={[
                     styles.matchCard,
-                    votingDisabled && styles.matchCardDisabled
+                    (votingDisabled || hasBet) && styles.matchCardDisabled,
                   ]}
                 >
-                  <TouchableOpacity 
-                    onPress={() => handleMatchPress(fixture)}
-                    disabled={votingDisabled}
-                    activeOpacity={votingDisabled ? 1 : 0.7}
+                  <TouchableOpacity
+                    onPress={() => canVote && handleMatchPress(fixture)}
+                    disabled={!canVote}
+                    activeOpacity={canVote ? 0.7 : 1}
                   >
                     <View style={styles.matchTeams}>
-                    <View style={styles.team}>
-                      <Image 
-                        source={{ uri: getDirectImageUrl(fixture.homeLogo) || 'https://via.placeholder.com/40' }} 
-                        style={styles.teamLogo}
-                        onError={(e) => {
-                          console.log('Image load error:', fixture.homeLogo);
-                        }}
-                      />
-                      <Text style={styles.teamName}>{fixture.homeTeam}</Text>
+                      <View style={styles.team}>
+                        <Image
+                          source={{ uri: getDirectImageUrl(fixture.homeLogo) || 'https://via.placeholder.com/40' }}
+                          style={styles.teamLogo}
+                          onError={(e) => {
+                            console.log('Image load error:', fixture.homeLogo);
+                          }}
+                        />
+                        <Text style={styles.teamName}>{fixture.homeTeam}</Text>
+                      </View>
+                      <View style={styles.matchCenter}>
+                        {hasScore ? (
+                          <Text style={styles.score}>{fixture.homeScore} - {fixture.awayScore}</Text>
+                        ) : isFinished ? (
+                          <Text style={styles.time}>{t('Finished')}</Text>
+                        ) : (
+                          <Text style={styles.time}>{formatTime24Hour(fixture.matchTime)}</Text>
+                        )}
+                        {selectedTab === 'upcoming' && !votingDisabled && (
+                          hasBet ? (
+                            <Text style={styles.betPlacedText}>{t('Bet placed')}</Text>
+                          ) : (
+                            <Text style={styles.voteText}>{t('Tap to vote')}</Text>
+                          )
+                        )}
+                      </View>
+                      <View style={styles.team}>
+                        <Text style={styles.teamName}>{fixture.awayTeam}</Text>
+                        <Image
+                          source={{ uri: getDirectImageUrl(fixture.awayLogo) || 'https://via.placeholder.com/40' }}
+                          style={styles.teamLogo}
+                          onError={(e) => {
+                            console.log('Image load error:', fixture.awayLogo);
+                          }}
+                        />
+                      </View>
                     </View>
-                    <View style={styles.matchCenter}>
-                      {votingDisabled && hasScore ? (
-                        <Text style={styles.score}>{fixture.homeScore} - {fixture.awayScore}</Text>
-                      ) : votingDisabled ? (
-                        <Text style={styles.time}>{t('Finished')}</Text>
-                      ) : hasScore ? (
-                        <Text style={styles.score}>{fixture.homeScore} - {fixture.awayScore}</Text>
-                      ) : (
-                        <Text style={styles.time}>{formatTime24Hour(fixture.matchTime)}</Text>
-                      )}
-                      {!votingDisabled && <Text style={styles.voteText}>{t('Tap to vote')}</Text>}
-                    </View>
-                    <View style={styles.team}>
-                      <Text style={styles.teamName}>{fixture.awayTeam}</Text>
-                      <Image 
-                        source={{ uri: getDirectImageUrl(fixture.awayLogo) || 'https://via.placeholder.com/40' }}
-                        style={styles.teamLogo}
-                        onError={(e) => {
-                          console.log('Image load error:', fixture.awayLogo);
-                        }}
-                      />
-                    </View>
-                  </View>
                   </TouchableOpacity>
                 </View>
               );
             })
           ) : (
             <View style={styles.emptyContainer}>
-              <Text style={styles.emptyText}>{t('No matches available')}</Text>
+              <Text style={styles.emptyText}>
+                {selectedTab === 'upcoming'
+                  ? t('No upcoming matches available')
+                  : t('No previous matches available')}
+              </Text>
             </View>
           )}
         </View>
@@ -547,6 +663,34 @@ const styles = StyleSheet.create({
     color: '#3B82F6',
     marginTop: 2,
     fontFamily: fonts.bodyMedium,
+  },
+  betPlacedText: {
+    fontSize: 10,
+    color: '#10B981',
+    marginTop: 2,
+    fontFamily: fonts.bodyMedium,
+  },
+  tabsRow: {
+    flexDirection: 'row',
+    marginBottom: 15,
+    gap: 10,
+  },
+  tabButton: {
+    paddingVertical: 8,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    backgroundColor: '#374151',
+  },
+  tabButtonActive: {
+    backgroundColor: '#3B82F6',
+  },
+  tabText: {
+    fontSize: 14,
+    fontFamily: fonts.bodyMedium,
+    color: '#9CA3AF',
+  },
+  tabTextActive: {
+    color: '#FFFFFF',
   },
   oddsContainer: {
     flexDirection: 'row',

@@ -522,8 +522,24 @@ exports.updateMatchScore = async (req, res) => {
 
     await match.save();
 
+    // Settle bet pools: winner gets 95% of pool; if no winner, each participant gets 95% of their stake back
+    let betSettlementResult = { settled: 0, errors: [] };
+    try {
+      const { settleMatchBetPools } = require('./betPaymentController');
+      betSettlementResult = await settleMatchBetPools(id, homeScore, awayScore);
+      if (betSettlementResult.errors.length) {
+        console.error('Bet pool settlement had errors:', betSettlementResult.errors);
+      }
+    } catch (settleErr) {
+      console.error('Error settling bet pools for match:', id, settleErr);
+      betSettlementResult.errors.push(settleErr.message);
+    }
+
     const totalPointsAwarded = pointsAwardedCount + forumPointsAwardedCount;
-    const message = `Match score updated. ${pointsAwardedCount} user(s) and ${forumPointsAwardedCount} forum head(s) earned points.`;
+    let message = `Match score updated. ${pointsAwardedCount} user(s) and ${forumPointsAwardedCount} forum head(s) earned points.`;
+    if (betSettlementResult.settled > 0) {
+      message += ` ${betSettlementResult.settled} bet pool(s) settled (95% payout/refund).`;
+    }
 
     res.status(200).json({
       success: true,
@@ -532,7 +548,9 @@ exports.updateMatchScore = async (req, res) => {
         match,
         pointsAwarded: totalPointsAwarded,
         userPointsAwarded: pointsAwardedCount,
-        forumPointsAwarded: forumPointsAwardedCount
+        forumPointsAwarded: forumPointsAwardedCount,
+        betPoolsSettled: betSettlementResult.settled,
+        betSettlementErrors: betSettlementResult.errors.length ? betSettlementResult.errors : undefined,
       }
     });
   } catch (error) {

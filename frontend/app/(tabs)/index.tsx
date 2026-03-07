@@ -8,6 +8,48 @@ import { useEffect, useState, useRef } from "react"
 import { ActivityIndicator, Alert, Image, ScrollView, StyleSheet, Text, TextInput, TouchableOpacity, View, ToastAndroid, Easing, Animated, useWindowDimensions } from "react-native"
 import { SafeAreaView } from "react-native-safe-area-context"
 import { homeAPI, pollsAPI, matchesAPI, preloadAPI, highlightsAPI, newsAPI, liveMatchesAPI, fanGroupsAPI, statisticsAPI, productsAPI, predictionForumsAPI, chatAPI } from "@/utils/api"
+
+// Helper: match start date+time in local time (for "has match started?" check)
+function getMatchStartDate(match: any): Date | null {
+  if (!match?.matchDate || !match?.matchTime) return null
+  try {
+    let d: Date
+    if (match.matchDate instanceof Date) {
+      d = new Date(match.matchDate.getTime())
+    } else if (typeof match.matchDate === "string") {
+      const dateStr = match.matchDate.split("T")[0]
+      const [y, m, day] = dateStr.split("-").map(Number)
+      d = new Date(y, m - 1, day)
+    } else {
+      d = new Date(match.matchDate)
+    }
+    const timeStr = String(match.matchTime).trim()
+    const pm = /(\d{1,2}):(\d{2})\s*PM$/i.test(timeStr)
+    const am = /(\d{1,2}):(\d{2})\s*AM$/i.test(timeStr)
+    let hours = 0, minutes = 0
+    if (pm || am) {
+      const parts = timeStr.match(/(\d{1,2}):(\d{2})/i)
+      if (parts) {
+        hours = parseInt(parts[1], 10)
+        minutes = parseInt(parts[2], 10)
+        if (pm && hours !== 12) hours += 12
+        if (am && hours === 12) hours = 0
+      }
+    } else {
+      const parts = timeStr.split(":")
+      hours = parseInt(parts[0], 10) || 0
+      minutes = parseInt(parts[1], 10) || 0
+    }
+    d.setHours(hours, minutes, 0, 0)
+    return d
+  } catch {
+    return null
+  }
+}
+function isMatchStarted(match: any): boolean {
+  const start = getMatchStartDate(match)
+  return start ? new Date() >= start : false
+}
 import { getDirectImageUrl } from "@/utils/imageUtils"
 import { fonts } from "@/utils/typography"
 import { LinearGradient } from "expo-linear-gradient"
@@ -31,12 +73,34 @@ export default function HomeScreen() {
   const [showPredictionSuccess, setShowPredictionSuccess] = useState(false)
   const [showVotingModal, setShowVotingModal] = useState(false)
   const [selectedMatch, setSelectedMatch] = useState<any>(null)
+  const [myPoolMatchIds, setMyPoolMatchIds] = useState<Set<string>>(new Set())
 
   // Fetch all home data and preload all API routes on mount
   useEffect(() => {
     fetchHomeData()
     preloadAllData()
   }, [])
+
+  // Fetch match IDs user has already bet on (for disabling "Tap to vote")
+  useEffect(() => {
+    if (!user) {
+      setMyPoolMatchIds(new Set())
+      return
+    }
+    matchesAPI
+      .getMyPools()
+      .then((res) => {
+        if (!res?.success || !res?.data) return
+        const ids = new Set<string>()
+        const pools = [...(res.data.active || []), ...(res.data.past || [])]
+        pools.forEach((p: any) => {
+          const mid = p?.match?._id || p?.match?.id || p?.match
+          if (mid) ids.add(String(mid))
+        })
+        setMyPoolMatchIds(ids)
+      })
+      .catch(() => setMyPoolMatchIds(new Set()))
+  }, [user])
 
   // Preload all data for all screens
   const preloadAllData = async () => {
@@ -250,6 +314,8 @@ export default function HomeScreen() {
   const leadersData = homeData?.predictionLeaders || []
 
   const todayMatches = homeData?.todayMatches || []
+  // Only show matches that have not started yet
+  const upcomingMatches = todayMatches.filter((m: any) => !isMatchStarted(m))
   const youtubeVideos = homeData?.highlights || []
   const highlightCategories: string[] = ["All", ...Array.from(new Set((youtubeVideos || []).map((h: any) => h.category).filter((c: any) => c))).map((c) => String(c))]
   const [selectedHighlightCategory, setSelectedHighlightCategory] = useState<string>("All")
@@ -384,7 +450,8 @@ const MarqueeComponent = ({ text }: { text: string }) => {
   }
 
   const handleMatchVote = async (matchId: string) => {
-    const match = todayMatches.find((m: any) => (m._id || m.id) === matchId)
+    if (myPoolMatchIds.has(matchId)) return
+    const match = upcomingMatches.find((m: any) => (m._id || m.id) === matchId)
     if (match) {
       setSelectedMatch({
         ...match,
@@ -413,6 +480,7 @@ const MarqueeComponent = ({ text }: { text: string }) => {
         poolId,
       })
       if (response.success) {
+        setMyPoolMatchIds((prev) => new Set(prev).add(matchId))
         await fetchHomeData()
         Alert.alert(t("Success"), t("Your bet has been placed in a pool!"))
         setShowVotingModal(false)
@@ -609,35 +677,47 @@ const MarqueeComponent = ({ text }: { text: string }) => {
             </TouchableOpacity>
           </View>
           <View style={styles.matchesCard}>
-            {todayMatches.length > 0 ? (
-              todayMatches.map((match: any) => (
-                <TouchableOpacity key={match._id || match.id} style={styles.matchRow} onPress={() => handleMatchVote(match._id || match.id)}>
-                  <View style={styles.matchTeam}>
-                    <Image 
-                      source={{ uri: getDirectImageUrl(match.homeLogo) || "https://via.placeholder.com/40" }} 
-                      style={styles.matchTeamLogo}
-                      onError={(e) => {
-                        console.log('Image load error:', match.homeLogo);
-                      }}
-                    />
-                    <Text style={styles.matchTeamName}>{match.homeTeam}</Text>
-                  </View>
-                  <View style={styles.matchCenter}>
-                    <Text style={styles.matchTime}>{match.matchTime}</Text>
-                    <Text style={styles.voteText}>{t("Tap to vote")}</Text>
-                  </View>
-                  <View style={styles.matchTeam}>
-                    <Text style={styles.matchTeamName}>{match.awayTeam}</Text>
-                    <Image 
-                      source={{ uri: getDirectImageUrl(match.awayLogo) || "https://via.placeholder.com/40" }} 
-                      style={styles.matchTeamLogo}
-                      onError={(e) => {
-                        console.log('Image load error:', match.awayLogo);
-                      }}
-                    />
-                  </View>
-                </TouchableOpacity>
-              ))
+            {upcomingMatches.length > 0 ? (
+              upcomingMatches.map((match: any) => {
+                const matchId = match._id || match.id
+                const hasBet = myPoolMatchIds.has(matchId)
+                return (
+                  <TouchableOpacity
+                    key={matchId}
+                    style={[styles.matchRow, hasBet && styles.matchRowDisabled]}
+                    onPress={() => !hasBet && handleMatchVote(matchId)}
+                    disabled={hasBet}
+                    activeOpacity={hasBet ? 1 : 0.7}
+                  >
+                    <View style={styles.matchTeam}>
+                      <Image 
+                        source={{ uri: getDirectImageUrl(match.homeLogo) || "https://via.placeholder.com/40" }} 
+                        style={styles.matchTeamLogo}
+                        onError={(e) => {
+                          console.log('Image load error:', match.homeLogo);
+                        }}
+                      />
+                      <Text style={styles.matchTeamName}>{match.homeTeam}</Text>
+                    </View>
+                    <View style={styles.matchCenter}>
+                      <Text style={styles.matchTime}>{match.matchTime}</Text>
+                      <Text style={[styles.voteText, hasBet && styles.betPlacedText]}>
+                        {hasBet ? t("Bet placed") : t("Tap to vote")}
+                      </Text>
+                    </View>
+                    <View style={styles.matchTeam}>
+                      <Text style={styles.matchTeamName}>{match.awayTeam}</Text>
+                      <Image 
+                        source={{ uri: getDirectImageUrl(match.awayLogo) || "https://via.placeholder.com/40" }} 
+                        style={styles.matchTeamLogo}
+                        onError={(e) => {
+                          console.log('Image load error:', match.awayLogo);
+                        }}
+                      />
+                    </View>
+                  </TouchableOpacity>
+                )
+              })
             ) : (
               <Text style={styles.noDataText}>{t("No upcoming matches available")}</Text>
             )}
@@ -1147,6 +1227,12 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     borderBottomWidth: 1,
     borderBottomColor: "#4A5568",
+  },
+  matchRowDisabled: {
+    opacity: 0.85,
+  },
+  betPlacedText: {
+    color: "#10B981",
   },
   matchTeam: {
     flexDirection: "row",
